@@ -1,0 +1,6 @@
+{
+  "name": "Kachava Lux Maintenance",
+  "description": "Production-oriented mobile-responsive maintenance management system for eight luxury private residences, featuring Material Design 3, bilingual EN/ES, photo work orders, role-based workflows, and reporting.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

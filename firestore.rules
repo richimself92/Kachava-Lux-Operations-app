@@ -1,0 +1,173 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny all access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Security Helpers
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (request.auth.token.email == 'ricardo.ferrergz@gmail.com' && request.auth.token.email_verified == true)
+      );
+    }
+
+    function isSupervisor() {
+      return isSignedIn() && (
+        isAdmin() ||
+        exists(/databases/$(database)/documents/supervisors/$(request.auth.uid))
+      );
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Entity Validations
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'active']) &&
+        data.uid is string && data.uid.size() <= 128 &&
+        data.email is string && data.email.size() <= 256 &&
+        data.displayName is string && data.displayName.size() <= 120 &&
+        data.role in ['staff', 'supervisor', 'admin'] &&
+        data.active is bool;
+    }
+
+    function isValidRequest(data) {
+      return data.keys().hasAll(['ticketId', 'villaNumber', 'villaName', 'category', 'priority', 'notes', 'status', 'submittedBy', 'createdAt']) &&
+        data.ticketId is string && data.ticketId.size() <= 32 &&
+        data.villaNumber in ['102', '104', '106', '108', '101', '103', '105', '107', 'office', 'gym', 'storage'] &&
+        data.villaName is string && data.villaName.size() <= 40 &&
+        data.category in ['plumbing', 'hvac', 'electrical', 'pool', 'spa', 'carpentry', 'appliances', 'lighting', 'av_tech', 'structural', 'glass_windows', 'grounds', 'common_areas'] &&
+        (!('commonAreaSubLocation' in data) || data.commonAreaSubLocation in ['hall', 'parking']) &&
+        data.priority in ['low', 'normal', 'high', 'urgent'] &&
+        data.status in ['pending', 'acknowledged', 'completed'] &&
+        data.notes is string && data.notes.size() <= 2000 &&
+        data.submittedBy is map &&
+        data.submittedBy.uid == request.auth.uid &&
+        (!('photos' in data) || (data.photos is list && data.photos.size() <= 5));
+    }
+
+    // 1. Users collection
+    match /users/{userId} {
+      allow get: if isSignedIn() && (isOwner(userId) || isAdmin() || isSupervisor());
+      allow list: if isSignedIn() && (isAdmin() || isSupervisor());
+      allow create: if isAdmin() && isValidId(userId) && isValidUser(incoming());
+      allow update: if (
+        isAdmin() && isValidId(userId) && isValidUser(incoming())
+      ) || (
+        isOwner(userId) && isValidId(userId) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'phone'])
+      );
+      allow delete: if isAdmin() && isValidId(userId);
+    }
+
+    // 2. Trusted Admin list
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() && isValidId(adminId);
+    }
+
+    // 3. Trusted Supervisor list
+    match /supervisors/{supervisorId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() && isValidId(supervisorId);
+    }
+
+    // 4. Residences catalog (8 official luxury residences)
+    match /residences/{residenceId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() && isValidId(residenceId);
+    }
+
+    // 5. Maintenance Requests collection
+    match /requests/{requestId} {
+      allow get: if isSignedIn() && isValidId(requestId) && (
+        resource.data.submittedBy.uid == request.auth.uid ||
+        isSupervisor() ||
+        isAdmin()
+      );
+      
+      allow list: if isSignedIn() && (
+        resource.data.submittedBy.uid == request.auth.uid ||
+        isSupervisor() ||
+        isAdmin()
+      );
+
+      // Creation by authenticated staff
+      allow create: if isSignedIn() && isValidId(requestId) &&
+        isValidRequest(incoming()) &&
+        incoming().status == 'pending' &&
+        incoming().submittedBy.uid == request.auth.uid &&
+        incoming().createdAt == request.time;
+
+      // Updates
+      allow update: if isSignedIn() && isValidId(requestId) && isValidRequest(incoming()) && (
+        isAdmin() ||
+        (
+          isSupervisor() && (
+            // Action 1: Acknowledge
+            (
+              existing().status == 'pending' &&
+              incoming().status == 'acknowledged' &&
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'status', 'assignedSupervisorId', 'assignedSupervisorName', 
+                'acknowledgedAt', 'acknowledgedBy', 'updatedAt', 'auditTrail', 'supervisorNotes'
+              ]) &&
+              incoming().assignedSupervisorId == request.auth.uid &&
+              incoming().acknowledgedAt == request.time
+            ) ||
+            // Action 2: Complete
+            (
+              existing().status == 'acknowledged' &&
+              incoming().status == 'completed' &&
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'status', 'completedAt', 'completedBy', 'supervisorNotes', 
+                'resolutionTimeHours', 'photos', 'updatedAt', 'auditTrail'
+              ]) &&
+              incoming().completedAt == request.time
+            ) ||
+            // Action 3: In-progress note or photo update
+            (
+              existing().status == 'acknowledged' &&
+              incoming().status == 'acknowledged' &&
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'supervisorNotes', 'photos', 'updatedAt', 'auditTrail'
+              ])
+            )
+          )
+        ) ||
+        (
+          existing().submittedBy.uid == request.auth.uid &&
+          existing().status == 'pending' &&
+          incoming().status == 'pending' &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'notes', 'photos', 'updatedAt', 'auditTrail'
+          ])
+        )
+      );
+
+      allow delete: if isAdmin() && isValidId(requestId);
+    }
+  }
+}

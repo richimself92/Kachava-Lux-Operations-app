@@ -1,0 +1,38 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Default deny
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isImageFile() {
+      return request.resource.contentType.matches('image/(jpeg|png|webp)');
+    }
+
+    function isUnder5MB() {
+      return request.resource.size < 5 * 1024 * 1024;
+    }
+
+    // Maintenance request photos organized by requestId
+    // Path: /requests/{requestId}/{photoType}/{photoId}
+    // where photoType is 'before' or 'after'
+    match /requests/{requestId}/{photoType}/{photoId} {
+      // Authenticated staff, supervisors, and admins can view photos
+      allow read: if isSignedIn();
+
+      // Uploads: must be authenticated, image type JPG/PNG/WebP, and under 5MB
+      allow write: if isSignedIn() &&
+        (photoType == 'before' || photoType == 'after') &&
+        isImageFile() &&
+        isUnder5MB();
+    }
+  }
+}

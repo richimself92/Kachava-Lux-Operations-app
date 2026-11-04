@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+:root {
+  --kl-color-background: #FFFFFF;
+  --kl-color-surface: #F3F3F1;
+  --kl-color-surface-hover: #E9E9E6;
+  --kl-color-primary: #6D4627;
+  --kl-color-primary-hover: #55361D;
+  --kl-color-primary-light: #F4EFEA;
+  --kl-color-accent: #989166;
+  --kl-color-accent-hover: #7F7952;
+  --kl-color-accent-light: #F6F5EE;
+  --kl-color-text: #202124;
+  --kl-color-text-secondary: #5F6368;
+  --kl-color-border: #DADCE0;
+  --kl-color-on-primary: #FFFFFF;
+  --kl-color-focus: #1A73E8;
+  --kl-status-pending: #E37400;
+  --kl-status-pending-bg: #FEF7E0;
+  --kl-status-acknowledged: #1A73E8;
+  --kl-status-acknowledged-bg: #E8F0FE;
+  --kl-status-completed: #137333;
+  --kl-status-completed-bg: #E6F4EA;
+  --kl-priority-urgent: #D93025;
+  --kl-priority-urgent-bg: #FCE8E6;
+  --kl-priority-high: #E37400;
+  --kl-priority-high-bg: #FEF7E0;
+  --kl-priority-normal: #5F6368;
+  --kl-priority-normal-bg: #F1F3F4;
+  --kl-priority-low: #70757A;
+  --kl-priority-low-bg: #F8F9FA;
+  --kl-radius-sm: 4px;
+  --kl-radius-md: 8px;
+  --kl-radius-lg: 12px;
+  --kl-font-ui: "Roboto", Arial, sans-serif;
+}
+
+body {
+  font-family: var(--kl-font-ui);
+  background-color: var(--kl-color-background);
+  color: var(--kl-color-text);
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom scrollbars for clean Google Workspace feel */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #DADCE0;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #BDC1C6;
+}

@@ -1,0 +1,89 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Authorized staff, supervisor, or administrator profile",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 256 },
+        "displayName": { "type": "string", "maxLength": 120 },
+        "role": { "type": "string", "enum": ["staff", "supervisor", "admin"] },
+        "title": { "type": "string", "maxLength": 120 },
+        "phone": { "type": "string", "maxLength": 40 },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["uid", "email", "displayName", "role", "active"]
+    },
+    "MaintenanceRequest": {
+      "title": "MaintenanceRequest",
+      "description": "Work order ticket across the eight villas and property facilities",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "ticketId": { "type": "string", "maxLength": 32 },
+        "villaNumber": { "type": "string", "enum": ["102", "104", "106", "108", "101", "103", "105", "107", "office", "gym", "storage"] },
+        "villaName": { "type": "string", "maxLength": 40 },
+        "locationType": { "type": "string", "enum": ["villa", "facility"] },
+        "category": { "type": "string", "enum": ["plumbing", "hvac", "electrical", "pool", "spa", "carpentry", "appliances", "lighting", "av_tech", "structural", "glass_windows", "grounds", "common_areas"] },
+        "commonAreaSubLocation": { "type": "string", "enum": ["hall", "parking"] },
+        "priority": { "type": "string", "enum": ["low", "normal", "high", "urgent"] },
+        "locationDetail": { "type": "string", "maxLength": 200 },
+        "notes": { "type": "string", "maxLength": 2000 },
+        "status": { "type": "string", "enum": ["pending", "acknowledged", "completed"] },
+        "submittedBy": { "type": "object" },
+        "createdAt": { "type": "string" },
+        "assignedSupervisorId": { "type": "string", "maxLength": 128 },
+        "assignedSupervisorName": { "type": "string", "maxLength": 120 },
+        "acknowledgedAt": { "type": "string" },
+        "acknowledgedBy": { "type": "object" },
+        "completedAt": { "type": "string" },
+        "completedBy": { "type": "object" },
+        "supervisorNotes": { "type": "string", "maxLength": 2000 },
+        "resolutionTimeHours": { "type": "number" },
+        "photos": { "type": "array" },
+        "auditTrail": { "type": "array" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["ticketId", "villaNumber", "villaName", "category", "priority", "notes", "status", "submittedBy", "createdAt"]
+    },
+    "Residence": {
+      "title": "PropertyLocation",
+      "description": "Catalog of the eight private luxury residences and property facilities",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "villaNumber": { "type": "string", "enum": ["102", "104", "106", "108", "101", "103", "105", "107", "office", "gym", "storage"] },
+        "name": { "type": "string", "maxLength": 40 },
+        "type": { "type": "string", "enum": ["villa", "facility"] },
+        "bedrooms": { "type": "number" },
+        "bathrooms": { "type": "number" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["villaNumber", "name", "isActive"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile with role designation"
+    },
+    "/admins/{adminId}": {
+      "schema": "User",
+      "description": "Trusted collection identifying verified administrators"
+    },
+    "/supervisors/{supervisorId}": {
+      "schema": "User",
+      "description": "Trusted collection identifying verified supervisors"
+    },
+    "/requests/{requestId}": {
+      "schema": "MaintenanceRequest",
+      "description": "Maintenance work orders across eight villas"
+    },
+    "/residences/{residenceId}": {
+      "schema": "Residence",
+      "description": "Catalog of the eight official villas"
+    }
+  }
+}
