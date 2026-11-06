@@ -1,0 +1,13 @@
+[
+  { "email": "eduardo@kachavalux.com", "displayName": "Eduardo Quijano", "role": "supervisor", "title": "General Manager" },
+  { "email": "carla.r@kachavalux.com", "displayName": "Carla Reina", "role": "supervisor", "title": "Administrative Manager" },
+  { "email": "randel@kachavalux.com", "displayName": "Randel Can Chuc", "role": "supervisor", "title": "Maintenance Manager" },
+  { "email": "matt@kachavalux.com", "displayName": "Matt Houston", "role": "admin", "title": "Founder & CEO" },
+  { "email": "gabby@kachavalux.com", "displayName": "Gaby Vidal", "role": "admin", "title": "Founder & CEO" },
+  { "email": "richard@kachavalux.com", "displayName": "Richard Fonbuena", "role": "admin", "title": "Founder & CEO" },
+  { "email": "ricardo.f@kachavalux.com", "displayName": "Ricardo Ferrer", "role": "admin", "title": "Marketing Manager" },
+  { "email": "bianca@kachavalux.com", "displayName": "Bianca Velásquez", "role": "staff", "title": "Revenue Manager" },
+  { "email": "david.rizo@kachavalux.com", "displayName": "David Rizo Castro", "role": "staff", "title": "Private Chef" },
+  { "email": "eduardo.v@kachavalux.com", "displayName": "Eduardo Velazco", "role": "staff", "title": "Yacht Captain" },
+  { "email": "dina@kachavalux.com", "displayName": "Dina Dominguez", "role": "staff", "title": "Housekeeping" }
+]

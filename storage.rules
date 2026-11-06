@@ -1,38 +1,75 @@
 rules_version = '2';
 
+// Kachava Lux Maintenance - Cloud Storage Security Rules
+// Photos: maintenanceRequests/{reqId}/{before|after}/{photoId}
+// Access mirrors firestore.rules via cross-service Firestore lookups.
+
 service firebase.storage {
   match /b/{bucket}/o {
-    
-    // Default deny
+
+    function emailLower() {
+      return request.auth.token.email.lower();
+    }
+
+    function hasCompanyIdentity() {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider == 'microsoft.com'
+        && request.auth.token.email is string
+        && emailLower().matches('^[^@]+@kachavalux[.]com$');
+    }
+
+    function userPath() {
+      return /databases/(default)/documents/users/$(emailLower());
+    }
+
+    function isApproved() {
+      return hasCompanyIdentity()
+        && firestore.exists(userPath())
+        && firestore.get(userPath()).data.active == true;
+    }
+
+    function isSupervisor() {
+      return isApproved() && firestore.get(userPath()).data.role in ['supervisor', 'admin'];
+    }
+
+    function requestPath(reqId) {
+      return /databases/(default)/documents/maintenanceRequests/$(reqId);
+    }
+
+    function requestData(reqId) {
+      return firestore.get(requestPath(reqId)).data;
+    }
+
+    function isSubmitter(reqId) {
+      return requestData(reqId).submittedBy.uid == request.auth.uid;
+    }
+
+    function isValidImage() {
+      return request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp)');
+    }
+
+    match /maintenanceRequests/{reqId}/{kind}/{photoId} {
+      allow read: if isApproved()
+        && firestore.exists(requestPath(reqId))
+        && (isSupervisor() || isSubmitter(reqId));
+
+      allow create: if isApproved()
+        && resource == null
+        && firestore.exists(requestPath(reqId))
+        && isValidImage()
+        && (
+          (kind == 'before' && isSubmitter(reqId) && requestData(reqId).status == 'sin_revisar')
+          || (kind == 'after' && isSupervisor() && requestData(reqId).status != 'completada')
+        );
+
+      // Evidence is immutable.
+      allow update, delete: if false;
+    }
+
+    // Default deny.
     match /{allPaths=**} {
       allow read, write: if false;
-    }
-
-    // Helper functions
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function isImageFile() {
-      return request.resource.contentType.matches('image/(jpeg|png|webp)');
-    }
-
-    function isUnder5MB() {
-      return request.resource.size < 5 * 1024 * 1024;
-    }
-
-    // Maintenance request photos organized by requestId
-    // Path: /requests/{requestId}/{photoType}/{photoId}
-    // where photoType is 'before' or 'after'
-    match /requests/{requestId}/{photoType}/{photoId} {
-      // Authenticated staff, supervisors, and admins can view photos
-      allow read: if isSignedIn();
-
-      // Uploads: must be authenticated, image type JPG/PNG/WebP, and under 5MB
-      allow write: if isSignedIn() &&
-        (photoType == 'before' || photoType == 'after') &&
-        isImageFile() &&
-        isUnder5MB();
     }
   }
 }

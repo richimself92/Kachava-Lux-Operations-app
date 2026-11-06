@@ -2,6 +2,7 @@ import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useRequests } from '../context/RequestContext';
 import { translations } from '../i18n/translations';
+import { locationLabel } from '../lib/labels';
 import { BedDouble, Bath, CheckCircle2, Clock, Building2, Home } from 'lucide-react';
 
 interface ResidencesViewProps {
@@ -30,7 +31,9 @@ export const ResidencesView: React.FC<ResidencesViewProps> = ({
           </h1>
         </div>
         <div className="text-xs text-[#5F6368] font-medium">
-          8 Villas • 3 Facilities
+          {t.locationSummary
+            .replace('{villas}', String(villasList.length))
+            .replace('{facilities}', String(otherLocationsList.length))}
         </div>
       </div>
 
@@ -122,25 +125,18 @@ export const ResidencesView: React.FC<ResidencesViewProps> = ({
         </div>
       </div>
 
-      {/* Section 2: Other Property Locations (Office, Gym, Storage) */}
+      {/* Section 2: Other Property Locations (facilities) */}
       <div className="space-y-3 pt-2">
         <div className="flex items-center gap-1.5 text-xs font-bold text-[#5F6368] uppercase tracking-wider">
           <Building2 className="w-4 h-4 text-[#6D4627]" />
-          <span>{t.facilitiesSectionTitle} (3)</span>
+          <span>{t.facilitiesSectionTitle} ({otherLocationsList.length})</span>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
           {otherLocationsList.map((facility) => {
             const activeCount = activeTicketCountsByVilla[facility.code] || 0;
             const hasIssues = activeCount > 0;
-            const facilityDisplayName =
-              facility.name === 'Office'
-                ? t.locOffice
-                : facility.name === 'Gym'
-                ? t.locGym
-                : facility.name === 'Storage'
-                ? t.locStorage
-                : facility.name;
+            const facilityDisplayName = locationLabel(t, facility.code, facility.name);
 
             return (
               <div

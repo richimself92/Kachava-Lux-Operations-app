@@ -1,173 +1,357 @@
 rules_version = '2';
 
+// Kachava Lux Maintenance - Firestore Security Rules
+// Authorization boundary: Microsoft (kachavalux.com tenant) sign-in + active entry in users/{emailLower}.
+// Enum lists below mirror shared/domain.ts (kept in sync by tests/unit/rules-parity.test.ts).
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Default deny all access
-    match /{document=**} {
-      allow read, write: if false;
-    }
-
-    // Security Helpers
-    function isValidId(id) {
-      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
-    }
-
-    function incoming() {
-      return request.resource.data;
-    }
-
-    function existing() {
-      return resource.data;
-    }
-
-    function isSignedIn() {
+    // ------------------------------------------------------------------
+    // Identity & roles
+    // ------------------------------------------------------------------
+    function signedIn() {
       return request.auth != null;
     }
 
-    function isAdmin() {
-      return isSignedIn() && (
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
-        (request.auth.token.email == 'ricardo.ferrergz@gmail.com' && request.auth.token.email_verified == true)
-      );
+    function emailLower() {
+      return request.auth.token.email.lower();
+    }
+
+    function hasCompanyIdentity() {
+      return signedIn()
+        && request.auth.token.firebase.sign_in_provider == 'microsoft.com'
+        && request.auth.token.email is string
+        && emailLower().matches('^[^@]+@kachavalux[.]com$');
+    }
+
+    function userPath(email) {
+      return /databases/$(database)/documents/users/$(email);
+    }
+
+    function me() {
+      return get(userPath(emailLower())).data;
+    }
+
+    function isApproved() {
+      return hasCompanyIdentity()
+        && exists(userPath(emailLower()))
+        && me().active == true;
     }
 
     function isSupervisor() {
-      return isSignedIn() && (
-        isAdmin() ||
-        exists(/databases/$(database)/documents/supervisors/$(request.auth.uid))
-      );
+      return isApproved() && me().role in ['supervisor', 'admin'];
     }
 
-    function isOwner(uid) {
-      return isSignedIn() && request.auth.uid == uid;
+    function isAdmin() {
+      return isApproved() && me().role == 'admin';
     }
 
-    // Entity Validations
-    function isValidUser(data) {
-      return data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'active']) &&
-        data.uid is string && data.uid.size() <= 128 &&
-        data.email is string && data.email.size() <= 256 &&
-        data.displayName is string && data.displayName.size() <= 120 &&
-        data.role in ['staff', 'supervisor', 'admin'] &&
-        data.active is bool;
+    // Actor reference {uid, email, name} must be the authenticated user.
+    function isMe(p) {
+      return p is map
+        && p.keys().hasOnly(['uid', 'email', 'name'])
+        && p.uid == request.auth.uid
+        && p.email == emailLower()
+        && p.name == me().displayName;
     }
 
-    function isValidRequest(data) {
-      return data.keys().hasAll(['ticketId', 'villaNumber', 'villaName', 'category', 'priority', 'notes', 'status', 'submittedBy', 'createdAt']) &&
-        data.ticketId is string && data.ticketId.size() <= 32 &&
-        data.villaNumber in ['102', '104', '106', '108', '101', '103', '105', '107', 'office', 'gym', 'storage'] &&
-        data.villaName is string && data.villaName.size() <= 40 &&
-        data.category in ['plumbing', 'hvac', 'electrical', 'pool', 'spa', 'carpentry', 'appliances', 'lighting', 'av_tech', 'structural', 'glass_windows', 'grounds', 'common_areas'] &&
-        (!('commonAreaSubLocation' in data) || data.commonAreaSubLocation in ['hall', 'parking']) &&
-        data.priority in ['low', 'normal', 'high', 'urgent'] &&
-        data.status in ['pending', 'acknowledged', 'completed'] &&
-        data.notes is string && data.notes.size() <= 2000 &&
-        data.submittedBy is map &&
-        data.submittedBy.uid == request.auth.uid &&
-        (!('photos' in data) || (data.photos is list && data.photos.size() <= 5));
+    // ------------------------------------------------------------------
+    // Domain enums (mirror shared/domain.ts)
+    // ------------------------------------------------------------------
+    function roles() {
+      return ['staff', 'supervisor', 'admin'];
     }
 
-    // 1. Users collection
-    match /users/{userId} {
-      allow get: if isSignedIn() && (isOwner(userId) || isAdmin() || isSupervisor());
-      allow list: if isSignedIn() && (isAdmin() || isSupervisor());
-      allow create: if isAdmin() && isValidId(userId) && isValidUser(incoming());
+    function statuses() {
+      return ['sin_revisar', 'pendiente', 'reconocida', 'completada'];
+    }
+
+    function categories() {
+      return ['plumbing', 'hvac', 'electrical', 'pool', 'jacuzzi', 'fauna_nociva', 'carpentry',
+              'appliances', 'lighting', 'av_tech', 'structural', 'glass_windows', 'grounds', 'common_areas'];
+    }
+
+    function priorities() {
+      return ['urgent', 'high', 'normal', 'low'];
+    }
+
+    function villaCodes() {
+      return ['102', '104', '106', '108', '101', '103', '105', '107'];
+    }
+
+    function facilityCodes() {
+      return ['office', 'warehouse_office', 'kitchen', 'gym', 'storage', 'bodega'];
+    }
+
+    function transitionAllowed(from, to) {
+      return (from == 'sin_revisar' && to in ['pendiente', 'reconocida'])
+        || (from == 'pendiente' && to == 'reconocida')
+        || (from == 'reconocida' && to in ['pendiente', 'completada']);
+    }
+
+    // ------------------------------------------------------------------
+    // Users allowlist: users/{emailLower}
+    // ------------------------------------------------------------------
+    function isValidUser(d) {
+      return d.keys().hasAll(['email', 'displayName', 'role', 'title', 'active'])
+        && d.keys().hasOnly(['email', 'displayName', 'role', 'title', 'phone', 'active',
+                             'uid', 'lastSignInAt', 'createdAt', 'updatedAt'])
+        && d.email is string && d.email.matches('^[^@A-Z]+@kachavalux[.]com$')
+        && d.displayName is string && d.displayName.size() > 0 && d.displayName.size() <= 120
+        && d.role in roles()
+        && d.title is string && d.title.size() <= 120
+        && (!('phone' in d) || (d.phone is string && d.phone.size() <= 40))
+        && d.active is bool;
+    }
+
+    match /users/{email} {
+      // Own doc readable with a company identity (lets the app tell "not listed" from "inactive").
+      allow get: if (hasCompanyIdentity() && email == emailLower()) || isSupervisor();
+      allow list: if isSupervisor();
+
+      allow create: if isAdmin()
+        && isValidUser(request.resource.data)
+        && request.resource.data.email == email
+        && request.resource.data.createdAt == request.time
+        && !('uid' in request.resource.data)
+        && !('lastSignInAt' in request.resource.data);
+
       allow update: if (
-        isAdmin() && isValidId(userId) && isValidUser(incoming())
-      ) || (
-        isOwner(userId) && isValidId(userId) &&
-        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'phone'])
-      );
-      allow delete: if isAdmin() && isValidId(userId);
+          isAdmin()
+          && isValidUser(request.resource.data)
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['displayName', 'role', 'title', 'phone', 'active', 'updatedAt'])
+          && request.resource.data.updatedAt == request.time
+        ) || (
+          isApproved()
+          && email == emailLower()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uid', 'lastSignInAt'])
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.lastSignInAt == request.time
+        );
+
+      // Deactivate instead of deleting, to preserve attribution history.
+      allow delete: if false;
     }
 
-    // 2. Trusted Admin list
-    match /admins/{adminId} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin() && isValidId(adminId);
+    // ------------------------------------------------------------------
+    // Maintenance requests
+    // ------------------------------------------------------------------
+    function requestPath(reqId) {
+      return /databases/$(database)/documents/maintenanceRequests/$(reqId);
     }
 
-    // 3. Trusted Supervisor list
-    match /supervisors/{supervisorId} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin() && isValidId(supervisorId);
+    function auditPath(reqId, auditId) {
+      return /databases/$(database)/documents/maintenanceRequests/$(reqId)/audit/$(auditId);
     }
 
-    // 4. Residences catalog (8 official luxury residences)
-    match /residences/{residenceId} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin() && isValidId(residenceId);
+    function isValidLocation(loc) {
+      return loc is map
+        && loc.keys().hasOnly(['code', 'name', 'type'])
+        && loc.name is string && loc.name.size() > 0 && loc.name.size() <= 40
+        && ((loc.type == 'villa' && loc.code in villaCodes())
+            || (loc.type == 'facility' && loc.code in facilityCodes()));
     }
 
-    // 5. Maintenance Requests collection
-    match /requests/{requestId} {
-      allow get: if isSignedIn() && isValidId(requestId) && (
-        resource.data.submittedBy.uid == request.auth.uid ||
-        isSupervisor() ||
-        isAdmin()
-      );
-      
-      allow list: if isSignedIn() && (
-        resource.data.submittedBy.uid == request.auth.uid ||
-        isSupervisor() ||
-        isAdmin()
-      );
+    function isValidRequestCore(d) {
+      return isValidLocation(d.location)
+        && d.category in categories()
+        && (d.category == 'common_areas'
+              ? ('commonAreaSubLocation' in d && d.commonAreaSubLocation in ['hall', 'parking'])
+              : !('commonAreaSubLocation' in d))
+        && d.priority in priorities()
+        && d.status in statuses()
+        && (!('locationDetail' in d)
+            || (d.locationDetail is string && d.locationDetail.size() > 0 && d.locationDetail.size() <= 200))
+        // notes: sanitized rich-text HTML; limit mirrors MAX_NOTES_LENGTH in src/lib/richText.ts
+        && d.notes is string && d.notes.size() > 0 && d.notes.size() <= 10000
+        && d.beforePhotos is list && d.beforePhotos.size() <= 5
+        && d.afterPhotos is list && d.afterPhotos.size() <= 5;
+    }
 
-      // Creation by authenticated staff
-      allow create: if isSignedIn() && isValidId(requestId) &&
-        isValidRequest(incoming()) &&
-        incoming().status == 'pending' &&
-        incoming().submittedBy.uid == request.auth.uid &&
-        incoming().createdAt == request.time;
+    // The batched audit entry referenced by lastAuditId exists after this write,
+    // was written now by this user, and has the expected action.
+    function auditPaired(reqId, actions) {
+      return request.resource.data.lastAuditId is string
+        && (resource == null || request.resource.data.lastAuditId != resource.data.lastAuditId)
+        && existsAfter(auditPath(reqId, request.resource.data.lastAuditId))
+        && getAfter(auditPath(reqId, request.resource.data.lastAuditId)).data.action in actions
+        && getAfter(auditPath(reqId, request.resource.data.lastAuditId)).data.at == request.time
+        && getAfter(auditPath(reqId, request.resource.data.lastAuditId)).data.by.uid == request.auth.uid;
+    }
 
-      // Updates
-      allow update: if isSignedIn() && isValidId(requestId) && isValidRequest(incoming()) && (
-        isAdmin() ||
-        (
-          isSupervisor() && (
-            // Action 1: Acknowledge
-            (
-              existing().status == 'pending' &&
-              incoming().status == 'acknowledged' &&
-              incoming().diff(existing()).affectedKeys().hasOnly([
-                'status', 'assignedSupervisorId', 'assignedSupervisorName', 
-                'acknowledgedAt', 'acknowledgedBy', 'updatedAt', 'auditTrail', 'supervisorNotes'
-              ]) &&
-              incoming().assignedSupervisorId == request.auth.uid &&
-              incoming().acknowledgedAt == request.time
-            ) ||
-            // Action 2: Complete
-            (
-              existing().status == 'acknowledged' &&
-              incoming().status == 'completed' &&
-              incoming().diff(existing()).affectedKeys().hasOnly([
-                'status', 'completedAt', 'completedBy', 'supervisorNotes', 
-                'resolutionTimeHours', 'photos', 'updatedAt', 'auditTrail'
-              ]) &&
-              incoming().completedAt == request.time
-            ) ||
-            // Action 3: In-progress note or photo update
-            (
-              existing().status == 'acknowledged' &&
-              incoming().status == 'acknowledged' &&
-              incoming().diff(existing()).affectedKeys().hasOnly([
-                'supervisorNotes', 'photos', 'updatedAt', 'auditTrail'
-              ])
-            )
-          )
-        ) ||
-        (
-          existing().submittedBy.uid == request.auth.uid &&
-          existing().status == 'pending' &&
-          incoming().status == 'pending' &&
-          incoming().diff(existing()).affectedKeys().hasOnly([
-            'notes', 'photos', 'updatedAt', 'auditTrail'
-          ])
-        )
-      );
+    function pairedAudit(reqId) {
+      return getAfter(auditPath(reqId, request.resource.data.lastAuditId)).data;
+    }
 
-      allow delete: if isAdmin() && isValidId(requestId);
+    function photosAppendOnly(before, after) {
+      return after.size() >= before.size() && after.hasAll(before);
+    }
+
+    function isActiveSupervisorRef(a) {
+      return a is map
+        && a.keys().hasOnly(['email', 'name'])
+        && a.email is string
+        && exists(userPath(a.email))
+        && get(userPath(a.email)).data.active == true
+        && get(userPath(a.email)).data.role in ['supervisor', 'admin']
+        && a.name == get(userPath(a.email)).data.displayName;
+    }
+
+    function hasAssignee(d) {
+      return 'assignedTo' in d && d.assignedTo != null;
+    }
+
+    function changed() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    // --- Update action A: submitter edits own unreviewed request ---
+    function isStaffEdit(reqId) {
+      return resource.data.submittedBy.uid == request.auth.uid
+        && resource.data.status == 'sin_revisar'
+        && request.resource.data.status == 'sin_revisar'
+        && changed().hasOnly(['notes', 'beforePhotos', 'updatedAt', 'lastAuditId'])
+        && photosAppendOnly(resource.data.beforePhotos, request.resource.data.beforePhotos)
+        && auditPaired(reqId, ['note_added', 'photo_added']);
+    }
+
+    // --- Update action B: supervisor/admin state transition ---
+    function isStatusChange(reqId) {
+      let d = request.resource.data;
+      let e = resource.data;
+      return isSupervisor()
+        && transitionAllowed(e.status, d.status)
+        && changed().hasOnly(['status', 'statusChangedAt', 'statusChangedBy', 'updatedAt', 'lastAuditId',
+                              'firstResponseAt', 'firstResponseBy', 'assignedTo',
+                              'completedAt', 'completedBy', 'supervisorNotes', 'afterPhotos'])
+        && d.statusChangedAt == request.time
+        && isMe(d.statusChangedBy)
+        && auditPaired(reqId, ['status_changed'])
+        && pairedAudit(reqId).fromStatus == e.status
+        && pairedAudit(reqId).toStatus == d.status
+        // Moving to pendiente requires the reason it cannot be completed yet (stored in the audit entry).
+        && (d.status != 'pendiente' || pairedAudit(reqId).details.trim().size() > 0)
+        // First response recorded once, on leaving sin_revisar.
+        && (e.status == 'sin_revisar'
+              ? (d.firstResponseAt == request.time && isMe(d.firstResponseBy))
+              : !changed().hasAny(['firstResponseAt', 'firstResponseBy']))
+        // Auto-assign the actor when unassigned; otherwise assignment unchanged.
+        && (!hasAssignee(e)
+              ? (d.assignedTo.email == emailLower() && isActiveSupervisorRef(d.assignedTo))
+              : !changed().hasAny(['assignedTo']))
+        // Completion requires note + server time + actor; after photos only here or via action C.
+        && (d.status == 'completada'
+              ? (d.completedAt == request.time
+                 && isMe(d.completedBy)
+                 && d.supervisorNotes is string
+                 && d.supervisorNotes.size() > 0 && d.supervisorNotes.size() <= 2000
+                 && photosAppendOnly(e.afterPhotos, d.afterPhotos))
+              : (!changed().hasAny(['completedAt', 'completedBy', 'afterPhotos'])
+                 && (!changed().hasAny(['supervisorNotes'])
+                     || (d.supervisorNotes is string && d.supervisorNotes.size() <= 2000))));
+    }
+
+    // --- Update action C: supervisor/admin reassign, note, after photos (no state change) ---
+    function isSupervisorEdit(reqId) {
+      let d = request.resource.data;
+      let e = resource.data;
+      return isSupervisor()
+        && e.status != 'completada'
+        && d.status == e.status
+        && changed().hasOnly(['assignedTo', 'supervisorNotes', 'afterPhotos', 'updatedAt', 'lastAuditId'])
+        && (!changed().hasAny(['assignedTo']) || isActiveSupervisorRef(d.assignedTo))
+        && (!changed().hasAny(['supervisorNotes'])
+            || (d.supervisorNotes is string && d.supervisorNotes.size() <= 2000))
+        && photosAppendOnly(e.afterPhotos, d.afterPhotos)
+        && auditPaired(reqId, ['reassigned', 'note_added', 'photo_added']);
+    }
+
+    // --- Update action D: supervisor/admin changes the priority of an open request ---
+    // (the value itself is validated by isValidRequestCore)
+    function isPriorityEdit(reqId) {
+      return isSupervisor()
+        && resource.data.status != 'completada'
+        && request.resource.data.priority != resource.data.priority
+        && changed().hasOnly(['priority', 'updatedAt', 'lastAuditId'])
+        && auditPaired(reqId, ['priority_changed']);
+    }
+
+    // Routes an update to the single action matching its paired audit entry, so only one
+    // branch is evaluated (keeps each request well under the 1000-expression rules limit).
+    // A missing/invalid lastAuditId makes getAfter() fail, which denies the write.
+    function updateAllowed(reqId, action) {
+      return (action == 'status_changed' && isStatusChange(reqId))
+        || (action == 'priority_changed' && isPriorityEdit(reqId))
+        || (action == 'reassigned' && isSupervisorEdit(reqId))
+        || (action in ['note_added', 'photo_added'] && (isStaffEdit(reqId) || isSupervisorEdit(reqId)));
+    }
+
+    match /maintenanceRequests/{reqId} {
+      allow get, list: if isApproved()
+        && (resource.data.submittedBy.uid == request.auth.uid || isSupervisor());
+
+      allow create: if isApproved()
+        && request.resource.data.keys().hasAll(['location', 'category', 'priority', 'notes',
+                                                 'status', 'submittedBy', 'createdAt', 'updatedAt',
+                                                 'statusChangedAt', 'beforePhotos', 'afterPhotos', 'lastAuditId'])
+        && request.resource.data.keys().hasOnly(['location', 'category', 'commonAreaSubLocation', 'priority',
+                                                  'locationDetail', 'notes', 'status', 'submittedBy',
+                                                  'createdAt', 'updatedAt', 'statusChangedAt',
+                                                  'beforePhotos', 'afterPhotos', 'lastAuditId'])
+        && isValidRequestCore(request.resource.data)
+        && request.resource.data.status == 'sin_revisar'
+        && isMe(request.resource.data.submittedBy)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.statusChangedAt == request.time
+        && request.resource.data.beforePhotos.size() == 0
+        && request.resource.data.afterPhotos.size() == 0
+        && auditPaired(reqId, ['created']);
+
+      // ticketId and kpi are never client-writable: no action lists them in affectedKeys.
+      allow update: if isApproved()
+        && isValidRequestCore(request.resource.data)
+        && request.resource.data.updatedAt == request.time
+        && updateAllowed(reqId, getAfter(auditPath(reqId, request.resource.data.lastAuditId)).data.action);
+
+      // Only admins may delete a request. The onMaintenanceRequestDeleted function
+      // then purges its audit subcollection and Storage photos (clients cannot).
+      allow delete: if isAdmin();
+
+      // Append-only audit history.
+      match /audit/{auditId} {
+        allow get, list: if isApproved()
+          && (isSupervisor() || get(requestPath(reqId)).data.submittedBy.uid == request.auth.uid);
+
+        allow create: if isApproved()
+          && request.resource.data.keys().hasAll(['action', 'at', 'by', 'details'])
+          && request.resource.data.keys().hasOnly(['action', 'fromStatus', 'toStatus', 'at', 'by', 'details'])
+          && request.resource.data.action in ['created', 'status_changed', 'reassigned', 'note_added', 'photo_added', 'priority_changed']
+          && request.resource.data.at == request.time
+          && request.resource.data.by is map
+          && request.resource.data.by.keys().hasOnly(['uid', 'email', 'name', 'role'])
+          && request.resource.data.by.uid == request.auth.uid
+          && request.resource.data.by.email == emailLower()
+          && request.resource.data.by.name == me().displayName
+          && request.resource.data.by.role == me().role
+          && request.resource.data.details is string && request.resource.data.details.size() <= 2000
+          // Must be written in the same batch as the parent change that references it.
+          && getAfter(requestPath(reqId)).data.lastAuditId == auditId;
+
+        allow update, delete: if false;
+      }
+    }
+
+    // Ticket counters: Cloud Functions (Admin SDK) only.
+    match /counters/{counterId} {
+      allow read, write: if false;
+    }
+
+    // Default deny for everything else.
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

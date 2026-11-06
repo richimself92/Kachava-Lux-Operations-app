@@ -1,64 +1,70 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { 
-  MaintenanceRequest, 
-  Residence, 
-  FilterOptions, 
-  PhotoAttachment, 
-  AuditLogEntry, 
-  AppUser, 
-  RequestStatus, 
-  MaintenanceCategory, 
-  RequestPriority,
-  CommonAreaSubLocation
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { isSupervisorRole, type RequestPriority } from '../../shared/domain';
+import { INITIAL_LOCATIONS } from '../data/initialData';
+import { richTextToPlain } from '../lib/richText';
+import { cancunDateKey, isInPeriod } from '../lib/time';
+import { db, storage } from '../services/firebase';
+import {
+  addNote as addNoteOp,
+  deleteRequest as deleteRequestOp,
+  attachPhotos,
+  changeStatus as changeStatusOp,
+  createRequestDoc,
+  reassign as reassignOp,
+  changePriority as changePriorityOp,
+  subscribeRequests,
+  uploadPhotos,
+  validatePhotos,
+  type Actor,
+  type NewRequestInput,
+} from '../services/requests';
+import { subscribeUsers } from '../services/users';
+import type {
+  AppUser,
+  AssigneeRef,
+  FilterOptions,
+  MaintenanceRequest,
+  PhotoKind,
+  RequestStatus,
+  Residence,
 } from '../types';
-import { INITIAL_REQUESTS, INITIAL_LOCATIONS } from '../data/initialData';
 import { useAuth } from './AuthContext';
-import { isLiveFirebase, db, storage, handleFirestoreError, OperationType } from '../services/firebase';
-import { collection, doc, addDoc, updateDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 interface RequestContextType {
   requests: MaintenanceRequest[];
   filteredRequests: MaintenanceRequest[];
+  loading: boolean;
+  loadError: boolean;
   residences: Residence[];
   filterOptions: FilterOptions;
   setFilterOptions: React.Dispatch<React.SetStateAction<FilterOptions>>;
   resetFilters: () => void;
-  createRequest: (
-    data: {
-      villaNumber: string;
-      category: MaintenanceCategory;
-      commonAreaSubLocation?: CommonAreaSubLocation;
-      priority: RequestPriority;
-      locationDetail: string;
-      notes: string;
-    },
-    photoFiles: File[]
-  ) => Promise<string>;
-  acknowledgeRequest: (requestId: string, supervisorNotes?: string) => Promise<void>;
-  completeRequest: (
-    requestId: string,
-    completedByName: string,
-    supervisorNotes: string,
-    afterPhotoFiles: File[]
-  ) => Promise<void>;
-  reassignSupervisor: (requestId: string, supervisorId: string, supervisorName: string) => Promise<void>;
-  updateResidence: (residence: Residence) => void;
-  addAuthorizedUser: (userData: Omit<AppUser, 'uid' | 'createdAt'>) => void;
-  toggleUserActive: (uid: string) => void;
-  usersList: AppUser[];
-  selectedRequest: MaintenanceRequest | null;
-  setSelectedRequest: (req: MaintenanceRequest | null) => void;
+  /** Creates the request, then uploads before photos. Returns the id and any photo names that failed. */
+  createRequest: (input: NewRequestInput, photoFiles: File[]) => Promise<{ id: string; failedPhotos: string[] }>;
+  /** Lifecycle transition (supervisors/admins). After photos are uploaded before completing. */
+  changeStatus: (
+    req: MaintenanceRequest,
+    to: RequestStatus,
+    opts?: { note?: string; resolutionNotes?: string; afterPhotoFiles?: File[] },
+  ) => Promise<{ failedPhotos: string[] }>;
+  reassign: (req: MaintenanceRequest, to: AssigneeRef) => Promise<void>;
+  changePriority: (req: MaintenanceRequest, to: RequestPriority) => Promise<void>;
+  addNote: (reqId: string, note: string) => Promise<void>;
+  deleteRequest: (reqId: string) => Promise<void>;
+  addPhotos: (req: MaintenanceRequest, kind: PhotoKind, files: File[]) => Promise<{ failedPhotos: string[] }>;
+  /** Active supervisors/admins (loaded for supervisors only) for reassignment and filters. */
+  assignableSupervisors: AppUser[];
   isSubmitting: boolean;
   activeTicketCountsByVilla: Record<string, number>;
 }
 
-const DEFAULT_FILTERS: FilterOptions = {
+export const DEFAULT_FILTERS: FilterOptions = {
   searchQuery: '',
   timeFilter: 'all',
+  createdOn: null,
   status: 'all',
-  villaNumber: 'all',
-  supervisorId: 'all',
+  locationCode: 'all',
+  assignee: 'all',
   category: 'all',
   priority: 'all',
 };
@@ -66,475 +72,188 @@ const DEFAULT_FILTERS: FilterOptions = {
 const RequestContext = createContext<RequestContextType | undefined>(undefined);
 
 export const RequestProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { currentUser, availableUsers } = useAuth();
+  const { currentUser } = useAuth();
+  const seesAll = isSupervisorRole(currentUser?.role);
 
-  const [residences, setResidences] = useState<Residence[]>(INITIAL_LOCATIONS);
-
-  const [requests, setRequests] = useState<MaintenanceRequest[]>(() => {
-    const saved = localStorage.getItem('klm_requests_v3');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        // fallback
-      }
-    }
-    return INITIAL_REQUESTS;
-  });
-
-  const [usersList, setUsersList] = useState<AppUser[]>(availableUsers);
+  const [requests, setRequests] = useState<MaintenanceRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [filterOptions, setFilterOptions] = useState<FilterOptions>(DEFAULT_FILTERS);
-  const [selectedRequest, setSelectedRequest] = useState<MaintenanceRequest | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [users, setUsers] = useState<AppUser[]>([]);
+
+  const uid = currentUser?.uid;
+  useEffect(() => {
+    if (!uid) return;
+    setLoading(true);
+    setLoadError(false);
+    return subscribeRequests(
+      db(),
+      { uid, seesAll },
+      (list) => {
+        setRequests(list);
+        setLoading(false);
+      },
+      (err) => {
+        console.error('Could not load requests', err);
+        setLoadError(true);
+        setLoading(false);
+      },
+    );
+  }, [uid, seesAll]);
 
   useEffect(() => {
-    if (!isLiveFirebase) {
-      localStorage.setItem('klm_requests_v3', JSON.stringify(requests));
+    if (!seesAll) {
+      setUsers([]);
+      return;
     }
-  }, [requests]);
+    return subscribeUsers(setUsers, (err) => console.error('Could not load users', err));
+  }, [seesAll]);
 
-  useEffect(() => {
-    if (isLiveFirebase && db && currentUser) {
-      const q = collection(db, 'requests');
-      const unsubscribe = onSnapshot(
-        q,
-        (snapshot) => {
-          const loaded: MaintenanceRequest[] = [];
-          snapshot.forEach((docSnapshot) => {
-            loaded.push({ id: docSnapshot.id, ...(docSnapshot.data() as any) });
-          });
-          setRequests(loaded);
-        },
-        (error) => {
-          handleFirestoreError(error, OperationType.LIST, 'requests');
-        }
-      );
-      return () => unsubscribe();
-    }
+  const assignableSupervisors = useMemo(
+    () => users.filter((u) => u.active && isSupervisorRole(u.role)),
+    [users],
+  );
+
+  const actor = useCallback((): Actor => {
+    if (!currentUser) throw new Error('Not signed in');
+    return { uid: currentUser.uid, email: currentUser.email, name: currentUser.displayName, role: currentUser.role };
   }, [currentUser]);
 
-  const resetFilters = () => {
-    setFilterOptions(DEFAULT_FILTERS);
-  };
+  const resetFilters = () => setFilterOptions(DEFAULT_FILTERS);
 
-  const fileToDataUrl = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  };
-
-  const uploadPhoto = async (
-    file: File, 
-    requestId: string, 
-    type: 'before' | 'after'
-  ): Promise<PhotoAttachment> => {
-    const photoId = 'p-' + Math.random().toString(36).substring(2, 9);
-    let finalUrl = '';
-
-    if (isLiveFirebase && storage) {
-      const storageRef = ref(storage, `requests/${requestId}/${type}/${photoId}-${file.name}`);
-      const uploadResult = await uploadBytes(storageRef, file);
-      finalUrl = await getDownloadURL(uploadResult.ref);
-    } else {
-      finalUrl = await fileToDataUrl(file);
-    }
-
-    return {
-      id: photoId,
-      url: finalUrl,
-      fileName: file.name,
-      sizeBytes: file.size,
-      mimeType: file.type,
-      uploadedAt: new Date().toISOString(),
-      uploadedByUid: currentUser?.uid || 'anonymous',
-      uploadedByName: currentUser?.displayName || 'Staff Member',
-      type,
-    };
-  };
-
-  const createRequest = async (
-    data: {
-      villaNumber: string;
-      category: MaintenanceCategory;
-      commonAreaSubLocation?: CommonAreaSubLocation;
-      priority: RequestPriority;
-      locationDetail: string;
-      notes: string;
-    },
-    photoFiles: File[]
-  ): Promise<string> => {
-    if (!currentUser) throw new Error('Submitting user is not authenticated');
+  const withSubmitting = async <T,>(fn: () => Promise<T>): Promise<T> => {
     setIsSubmitting(true);
-
     try {
-      const location = residences.find((r) => r.code === data.villaNumber);
-      const villaName = location ? location.name : `Villa ${data.villaNumber}`;
-      const locationType = location?.type || 'villa';
-      const nowIso = new Date().toISOString();
-      const currentYear = new Date().getFullYear();
-      
-      const count = requests.length + 1;
-      const ticketId = `KLM-${currentYear}-${String(count).padStart(4, '0')}`;
-      const tempId = 'req-' + Date.now();
-
-      const uploadedPhotos: PhotoAttachment[] = [];
-      const photosToUpload = photoFiles.slice(0, 5);
-      for (const file of photosToUpload) {
-        const photo = await uploadPhoto(file, tempId, 'before');
-        uploadedPhotos.push(photo);
-      }
-
-      const initialAudit: AuditLogEntry = {
-        id: 'aud-' + Date.now(),
-        timestamp: nowIso,
-        action: 'created',
-        performedByUid: currentUser.uid,
-        performedByName: currentUser.displayName,
-        performedByRole: currentUser.role,
-        details: `Work order submitted for ${villaName} (${data.category}${data.commonAreaSubLocation ? ` - ${data.commonAreaSubLocation}` : ''}). Priority: ${data.priority.toUpperCase()}`,
-      };
-
-      const newRequest: MaintenanceRequest = {
-        id: tempId,
-        ticketId,
-        villaNumber: data.villaNumber,
-        villaName,
-        locationType,
-        category: data.category,
-        commonAreaSubLocation: data.commonAreaSubLocation,
-        priority: data.priority,
-        locationDetail: data.locationDetail,
-        notes: data.notes,
-        status: 'pending',
-        submittedBy: {
-          uid: currentUser.uid,
-          name: currentUser.displayName,
-          email: currentUser.email,
-          role: currentUser.role,
-        },
-        createdAt: nowIso,
-        photos: uploadedPhotos,
-        auditTrail: [initialAudit],
-        updatedAt: nowIso,
-      };
-
-      if (isLiveFirebase && db) {
-        const docRef = await addDoc(collection(db, 'requests'), {
-          ...newRequest,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-        newRequest.id = docRef.id;
-      }
-
-      setRequests((prev) => [newRequest, ...prev]);
-      return ticketId;
+      return await fn();
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const acknowledgeRequest = async (requestId: string, supervisorNotes?: string) => {
-    if (!currentUser) throw new Error('Unauthorized');
-    const nowIso = new Date().toISOString();
-
-    const auditEntry: AuditLogEntry = {
-      id: 'aud-' + Date.now(),
-      timestamp: nowIso,
-      action: 'acknowledged',
-      performedByUid: currentUser.uid,
-      performedByName: currentUser.displayName,
-      performedByRole: currentUser.role,
-      details: supervisorNotes 
-        ? `Acknowledged by ${currentUser.displayName}. Note: "${supervisorNotes}"` 
-        : `Acknowledged and assigned to ${currentUser.displayName}`,
-    };
-
-    if (isLiveFirebase && db) {
+  const createRequest: RequestContextType['createRequest'] = (input, photoFiles) =>
+    withSubmitting(async () => {
+      validatePhotos(photoFiles);
+      const a = actor();
+      const id = await createRequestDoc(db(), a, input);
+      if (photoFiles.length === 0) return { id, failedPhotos: [] };
+      // The request exists now, so Storage rules can verify ownership of the upload path.
+      const { uploaded, failed } = await uploadPhotos(storage(), a, id, 'before', photoFiles);
       try {
-        const docRef = doc(db, 'requests', requestId);
-        await updateDoc(docRef, {
-          status: 'acknowledged',
-          assignedSupervisorId: currentUser.uid,
-          assignedSupervisorName: currentUser.displayName,
-          acknowledgedAt: serverTimestamp(),
-          acknowledgedBy: {
-            uid: currentUser.uid,
-            name: currentUser.displayName,
-          },
-          ...(supervisorNotes ? { supervisorNotes } : {}),
-          updatedAt: serverTimestamp(),
-        });
-      } catch (error) {
-        handleFirestoreError(error, OperationType.UPDATE, `requests/${requestId}`);
+        await attachPhotos(db(), a, { id, beforePhotos: [], afterPhotos: [] }, 'before', uploaded);
+      } catch (err) {
+        console.error('Could not attach photos', err);
+        return { id, failedPhotos: photoFiles.map((f) => f.name) };
       }
-    }
+      return { id, failedPhotos: failed };
+    });
 
-    setRequests((prev) =>
-      prev.map((req) => {
-        if (req.id === requestId) {
-          const updated: MaintenanceRequest = {
-            ...req,
-            status: 'acknowledged',
-            assignedSupervisorId: currentUser.uid,
-            assignedSupervisorName: currentUser.displayName,
-            acknowledgedAt: nowIso,
-            acknowledgedBy: {
-              uid: currentUser.uid,
-              name: currentUser.displayName,
-            },
-            supervisorNotes: supervisorNotes || req.supervisorNotes,
-            auditTrail: [...req.auditTrail, auditEntry],
-            updatedAt: nowIso,
-          };
-          if (selectedRequest?.id === requestId) {
-            setSelectedRequest(updated);
-          }
-          return updated;
-        }
-        return req;
-      })
-    );
-  };
-
-  const completeRequest = async (
-    requestId: string,
-    completedByName: string,
-    supervisorNotes: string,
-    afterPhotoFiles: File[]
-  ) => {
-    if (!currentUser) throw new Error('Unauthorized');
-    const target = requests.find((r) => r.id === requestId);
-    if (!target) return;
-
-    setIsSubmitting(true);
-    try {
-      const nowIso = new Date().toISOString();
-      const createdDate = new Date(target.createdAt).getTime();
-      const resolutionHours = Number(((Date.now() - createdDate) / (1000 * 60 * 60)).toFixed(1));
-
-      const newAfterPhotos: PhotoAttachment[] = [];
-      for (const file of afterPhotoFiles.slice(0, 5)) {
-        const p = await uploadPhoto(file, requestId, 'after');
-        newAfterPhotos.push(p);
+  const changeStatus: RequestContextType['changeStatus'] = (req, to, opts = {}) =>
+    withSubmitting(async () => {
+      const a = actor();
+      let failedPhotos: string[] = [];
+      let afterPhotos;
+      if (to === 'completada' && opts.afterPhotoFiles?.length) {
+        validatePhotos(opts.afterPhotoFiles, req.afterPhotos.length);
+        const res = await uploadPhotos(storage(), a, req.id, 'after', opts.afterPhotoFiles);
+        afterPhotos = res.uploaded;
+        failedPhotos = res.failed;
       }
+      await changeStatusOp(db(), a, req, to, {
+        note: opts.note,
+        resolutionNotes: opts.resolutionNotes,
+        afterPhotos,
+      });
+      return { failedPhotos };
+    });
 
-      const auditEntry: AuditLogEntry = {
-        id: 'aud-' + Date.now(),
-        timestamp: nowIso,
-        action: 'completed',
-        performedByUid: currentUser.uid,
-        performedByName: currentUser.displayName,
-        performedByRole: currentUser.role,
-        details: `Work completed by ${completedByName}. Resolution: ${resolutionHours} hrs. Notes: "${supervisorNotes}"`,
-      };
+  const reassign: RequestContextType['reassign'] = (req, to) =>
+    withSubmitting(() => reassignOp(db(), actor(), req, to));
 
-      const updatedPhotos = [...target.photos, ...newAfterPhotos];
+  const changePriority: RequestContextType['changePriority'] = (req, to) =>
+    withSubmitting(() => changePriorityOp(db(), actor(), req, to));
 
-      if (isLiveFirebase && db) {
-        try {
-          const docRef = doc(db, 'requests', requestId);
-          await updateDoc(docRef, {
-            status: 'completed',
-            completedAt: serverTimestamp(),
-            completedBy: {
-              uid: currentUser.uid,
-              name: completedByName,
-            },
-            supervisorNotes,
-            resolutionTimeHours: resolutionHours,
-            photos: updatedPhotos,
-            updatedAt: serverTimestamp(),
-          });
-        } catch (error) {
-          handleFirestoreError(error, OperationType.UPDATE, `requests/${requestId}`);
-        }
-      }
+  const addNote: RequestContextType['addNote'] = (reqId, note) =>
+    withSubmitting(() => addNoteOp(db(), actor(), reqId, note));
 
-      setRequests((prev) =>
-        prev.map((req) => {
-          if (req.id === requestId) {
-            const updated: MaintenanceRequest = {
-              ...req,
-              status: 'completed',
-              completedAt: nowIso,
-              completedBy: {
-                uid: currentUser.uid,
-                name: completedByName,
-              },
-              supervisorNotes,
-              resolutionTimeHours: resolutionHours,
-              photos: updatedPhotos,
-              auditTrail: [...req.auditTrail, auditEntry],
-              updatedAt: nowIso,
-            };
-            if (selectedRequest?.id === requestId) {
-              setSelectedRequest(updated);
-            }
-            return updated;
-          }
-          return req;
-        })
-      );
-    } finally {
-      setIsSubmitting(false);
+  const deleteRequest: RequestContextType['deleteRequest'] = (reqId) =>
+    withSubmitting(() => deleteRequestOp(db(), reqId));
+
+  const addPhotos: RequestContextType['addPhotos'] = (req, kind, files) =>
+    withSubmitting(async () => {
+      const existing = kind === 'before' ? req.beforePhotos : req.afterPhotos;
+      validatePhotos(files, existing.length);
+      const a = actor();
+      const { uploaded, failed } = await uploadPhotos(storage(), a, req.id, kind, files);
+      await attachPhotos(db(), a, req, kind, uploaded);
+      return { failedPhotos: failed };
+    });
+
+  const activeTicketCountsByVilla = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const r of requests) {
+      if (r.status !== 'completada') counts[r.location.code] = (counts[r.location.code] ?? 0) + 1;
     }
-  };
+    return counts;
+  }, [requests]);
 
-  const reassignSupervisor = async (requestId: string, supervisorId: string, supervisorName: string) => {
-    if (!currentUser) throw new Error('Unauthorized');
-    const nowIso = new Date().toISOString();
-
-    const auditEntry: AuditLogEntry = {
-      id: 'aud-' + Date.now(),
-      timestamp: nowIso,
-      action: 'reassigned',
-      performedByUid: currentUser.uid,
-      performedByName: currentUser.displayName,
-      performedByRole: currentUser.role,
-      details: `Reassigned to supervisor ${supervisorName} by ${currentUser.displayName}`,
-    };
-
-    setRequests((prev) =>
-      prev.map((req) => {
-        if (req.id === requestId) {
-          const updated: MaintenanceRequest = {
-            ...req,
-            assignedSupervisorId: supervisorId,
-            assignedSupervisorName: supervisorName,
-            auditTrail: [...req.auditTrail, auditEntry],
-            updatedAt: nowIso,
-          };
-          if (selectedRequest?.id === requestId) {
-            setSelectedRequest(updated);
-          }
-          return updated;
-        }
-        return req;
-      })
-    );
-  };
-
-  const updateResidence = (updated: Residence) => {
-    setResidences((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
-  };
-
-  const addAuthorizedUser = (userData: Omit<AppUser, 'uid' | 'createdAt'>) => {
-    const newUser: AppUser = {
-      ...userData,
-      uid: 'user-' + Date.now(),
-      isFirebaseVerified: false,
-      createdAt: new Date().toISOString(),
-    };
-    setUsersList((prev) => [newUser, ...prev]);
-  };
-
-  const toggleUserActive = (uid: string) => {
-    setUsersList((prev) =>
-      prev.map((u) => (u.uid === uid ? { ...u, active: !u.active } : u))
-    );
-  };
-
-  const activeTicketCountsByVilla = residences.reduce((acc, loc) => {
-    const count = requests.filter(
-      (r) => r.villaNumber === loc.code && r.status !== 'completed'
-    ).length;
-    acc[loc.code] = count;
-    return acc;
-  }, {} as Record<string, number>);
-
-  const filteredRequests = requests.filter((req) => {
-    if (currentUser?.role === 'staff' && req.submittedBy.uid !== currentUser.uid) {
-      return false;
-    }
-
-    if (filterOptions.status !== 'all' && req.status !== filterOptions.status) {
-      return false;
-    }
-
-    if (filterOptions.villaNumber !== 'all' && req.villaNumber !== filterOptions.villaNumber) {
-      return false;
-    }
-
-    if (filterOptions.supervisorId !== 'all') {
-      if (filterOptions.supervisorId === 'unassigned') {
-        if (req.assignedSupervisorId) return false;
-      } else if (req.assignedSupervisorId !== filterOptions.supervisorId) {
+  const filteredRequests = useMemo(() => {
+    const now = new Date();
+    const q = filterOptions.searchQuery.trim().toLowerCase();
+    return requests.filter((req) => {
+      if (filterOptions.status !== 'all' && req.status !== filterOptions.status) return false;
+      if (filterOptions.locationCode !== 'all' && req.location.code !== filterOptions.locationCode) return false;
+      if (filterOptions.assignee === 'unassigned' && req.assignedTo) return false;
+      if (
+        filterOptions.assignee !== 'all' &&
+        filterOptions.assignee !== 'unassigned' &&
+        req.assignedTo?.email !== filterOptions.assignee
+      )
         return false;
+      if (filterOptions.category !== 'all' && req.category !== filterOptions.category) return false;
+      if (filterOptions.priority !== 'all' && req.priority !== filterOptions.priority) return false;
+      if (filterOptions.createdOn) {
+        if (cancunDateKey(req.createdAt) !== filterOptions.createdOn) return false;
+      } else if (!isInPeriod(req.createdAt, filterOptions.timeFilter, now)) return false;
+      if (q) {
+        const haystack = [
+          req.ticketId,
+          req.location.name,
+          req.location.code,
+          richTextToPlain(req.notes),
+          req.locationDetail,
+          req.commonAreaSubLocation,
+          req.submittedBy.name,
+          req.assignedTo?.name,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        if (!haystack.includes(q)) return false;
       }
-    }
-
-    if (filterOptions.category !== 'all' && req.category !== filterOptions.category) {
-      return false;
-    }
-
-    if (filterOptions.priority !== 'all' && req.priority !== filterOptions.priority) {
-      return false;
-    }
-
-    if (filterOptions.timeFilter !== 'all') {
-      const reqDate = new Date(req.createdAt);
-      const now = new Date();
-
-      if (filterOptions.timeFilter === 'daily') {
-        const isSameDay =
-          reqDate.getFullYear() === now.getFullYear() &&
-          reqDate.getMonth() === now.getMonth() &&
-          reqDate.getDate() === now.getDate();
-        if (!isSameDay) return false;
-      } else if (filterOptions.timeFilter === 'weekly') {
-        const oneWeekAgo = new Date();
-        oneWeekAgo.setDate(now.getDate() - 7);
-        if (reqDate < oneWeekAgo) return false;
-      } else if (filterOptions.timeFilter === 'monthly') {
-        const isSameMonth =
-          reqDate.getFullYear() === now.getFullYear() &&
-          reqDate.getMonth() === now.getMonth();
-        if (!isSameMonth) return false;
-      } else if (filterOptions.timeFilter === 'yearly') {
-        if (reqDate.getFullYear() !== now.getFullYear()) return false;
-      }
-    }
-
-    if (filterOptions.searchQuery.trim()) {
-      const q = filterOptions.searchQuery.toLowerCase();
-      const match =
-        req.ticketId.toLowerCase().includes(q) ||
-        req.villaName.toLowerCase().includes(q) ||
-        req.villaNumber.toLowerCase().includes(q) ||
-        req.notes.toLowerCase().includes(q) ||
-        req.locationDetail.toLowerCase().includes(q) ||
-        (req.commonAreaSubLocation && req.commonAreaSubLocation.toLowerCase().includes(q)) ||
-        req.submittedBy.name.toLowerCase().includes(q) ||
-        (req.assignedSupervisorName && req.assignedSupervisorName.toLowerCase().includes(q));
-      if (!match) return false;
-    }
-
-    return true;
-  });
+      return true;
+    });
+  }, [requests, filterOptions]);
 
   return (
     <RequestContext.Provider
       value={{
         requests,
         filteredRequests,
-        residences,
+        loading,
+        loadError,
+        residences: INITIAL_LOCATIONS,
         filterOptions,
         setFilterOptions,
         resetFilters,
         createRequest,
-        acknowledgeRequest,
-        completeRequest,
-        reassignSupervisor,
-        updateResidence,
-        addAuthorizedUser,
-        toggleUserActive,
-        usersList,
-        selectedRequest,
-        setSelectedRequest,
+        changeStatus,
+        reassign,
+        changePriority,
+        addNote,
+        deleteRequest,
+        addPhotos,
+        assignableSupervisors,
         isSubmitting,
         activeTicketCountsByVilla,
       }}
@@ -546,8 +265,6 @@ export const RequestProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
 export const useRequests = () => {
   const context = useContext(RequestContext);
-  if (!context) {
-    throw new Error('useRequests must be used within a RequestProvider');
-  }
+  if (!context) throw new Error('useRequests must be used within a RequestProvider');
   return context;
 };

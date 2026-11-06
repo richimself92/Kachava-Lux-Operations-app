@@ -1,61 +1,83 @@
-export type Role = 'staff' | 'supervisor' | 'admin';
+import type {
+  CommonAreaSubLocation,
+  MaintenanceCategory,
+  PropertyLocationType,
+  RequestPriority,
+  RequestStatus,
+  Role,
+} from '../../shared/domain';
 
+export type {
+  CommonAreaSubLocation,
+  MaintenanceCategory,
+  PropertyLocationType,
+  RequestPriority,
+  RequestStatus,
+  Role,
+} from '../../shared/domain';
+
+/** Approved user, stored at users/{emailLower}. */
 export interface AppUser {
-  uid: string;
+  /** Lowercase email; also the Firestore document id. */
   email: string;
   displayName: string;
   role: Role;
   title: string;
   phone?: string;
   active: boolean;
-  isFirebaseVerified?: boolean;
-  createdAt: string;
+  /** Firebase Auth uid, recorded on the user's first sign-in. */
+  uid?: string;
+  lastSignInAt?: Date | null;
+  createdAt?: Date | null;
 }
 
-export type RequestStatus = 'pending' | 'acknowledged' | 'completed';
+/** Identity of the authenticated actor (uid is the Firebase Auth uid). */
+export interface PersonRef {
+  uid: string;
+  email: string;
+  name: string;
+}
 
-export type RequestPriority = 'urgent' | 'high' | 'normal' | 'low';
+/** Assignee is referenced by email so supervisors can be assigned before first sign-in. */
+export interface AssigneeRef {
+  email: string;
+  name: string;
+}
 
-export type MaintenanceCategory =
-  | 'plumbing'
-  | 'hvac'
-  | 'electrical'
-  | 'pool'
-  | 'spa'
-  | 'carpentry'
-  | 'appliances'
-  | 'lighting'
-  | 'av_tech'
-  | 'structural'
-  | 'glass_windows'
-  | 'grounds'
-  | 'common_areas';
-
-export type CommonAreaSubLocation = 'hall' | 'parking';
+export type PhotoKind = 'before' | 'after';
 
 export interface PhotoAttachment {
   id: string;
-  url: string;
+  /** Cloud Storage object path; resolved to a URL at view time (rules-checked). */
+  path: string;
   fileName: string;
   sizeBytes: number;
   mimeType: string;
-  uploadedAt: string;
-  uploadedByUid: string;
-  uploadedByName: string;
-  type: 'before' | 'after';
+  uploadedAt: Date | null;
+  uploadedBy: PersonRef;
+  kind: PhotoKind;
 }
+
+export type AuditAction = 'created' | 'status_changed' | 'reassigned' | 'note_added' | 'photo_added' | 'priority_changed';
 
 export interface AuditLogEntry {
   id: string;
-  timestamp: string;
-  action: 'created' | 'acknowledged' | 'reassigned' | 'completed' | 'note_added' | 'photo_added';
-  performedByUid: string;
-  performedByName: string;
-  performedByRole: Role;
+  action: AuditAction;
+  fromStatus?: RequestStatus;
+  toStatus?: RequestStatus;
+  at: Date | null;
+  by: PersonRef & { role: Role };
   details: string;
 }
 
-export type PropertyLocationType = 'villa' | 'facility';
+export interface RequestKpi {
+  responseMs: number | null;
+  responseSlaMet: boolean | null;
+  workMs: number;
+  blockedMs: number;
+  totalMs: number | null;
+  computedAt?: Date | null;
+}
 
 export interface PropertyLocation {
   id: string;
@@ -70,46 +92,48 @@ export interface PropertyLocation {
 // Backward-compatible alias for existing code
 export type Residence = PropertyLocation;
 
+export interface RequestLocation {
+  code: string;
+  name: string;
+  type: PropertyLocationType;
+}
+
 export interface MaintenanceRequest {
   id: string;
-  ticketId: string;
-  villaNumber: string; // Location identifier code: "102"..."107", "office", "gym", "storage"
-  villaName: string; // "Villa 102", "Office", etc.
-  locationType?: PropertyLocationType;
+  /** Assigned by the backend shortly after creation; undefined until then. */
+  ticketId?: string;
+  location: RequestLocation;
   category: MaintenanceCategory;
   commonAreaSubLocation?: CommonAreaSubLocation;
   priority: RequestPriority;
-  locationDetail: string;
+  /** Legacy free-text location detail (no longer collected for new requests). */
+  locationDetail?: string;
+  /** Description: sanitized rich-text HTML (or plain text on older requests). */
   notes: string;
   status: RequestStatus;
-  
-  submittedBy: {
-    uid: string;
-    name: string;
-    email: string;
-    role: Role;
-  };
-  createdAt: string;
-  
-  assignedSupervisorId?: string;
-  assignedSupervisorName?: string;
-  acknowledgedAt?: string;
-  acknowledgedBy?: {
-    uid: string;
-    name: string;
-  };
-  
-  completedAt?: string;
-  completedBy?: {
-    uid: string;
-    name: string;
-  };
+
+  submittedBy: PersonRef;
+  createdAt: Date;
+  updatedAt: Date | null;
+
+  statusChangedAt: Date | null;
+  statusChangedBy?: PersonRef;
+  lastAuditId?: string;
+
+  firstResponseAt?: Date | null;
+  firstResponseBy?: PersonRef;
+
+  completedAt?: Date | null;
+  completedBy?: PersonRef;
   supervisorNotes?: string;
-  resolutionTimeHours?: number;
-  
-  photos: PhotoAttachment[];
-  auditTrail: AuditLogEntry[];
-  updatedAt: string;
+
+  assignedTo?: AssigneeRef | null;
+
+  beforePhotos: PhotoAttachment[];
+  afterPhotos: PhotoAttachment[];
+
+  /** Written only by the backend KPI function. */
+  kpi?: RequestKpi;
 }
 
 export type TimeFilter = 'all' | 'daily' | 'weekly' | 'monthly' | 'yearly';
@@ -117,9 +141,12 @@ export type TimeFilter = 'all' | 'daily' | 'weekly' | 'monthly' | 'yearly';
 export interface FilterOptions {
   searchQuery: string;
   timeFilter: TimeFilter;
+  /** A specific creation day (`YYYY-MM-DD`, Cancun). When set it replaces `timeFilter`. */
+  createdOn: string | null;
   status: 'all' | RequestStatus;
-  villaNumber: 'all' | string;
-  supervisorId: 'all' | string;
+  locationCode: 'all' | string;
+  /** Assignee email, 'unassigned', or 'all'. */
+  assignee: 'all' | 'unassigned' | string;
   category: 'all' | MaintenanceCategory;
   priority: 'all' | RequestPriority;
 }
