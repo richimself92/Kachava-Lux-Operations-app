@@ -1,280 +1,377 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  AlertCircle,
+  Camera,
+  CheckCircle2,
+  Flag,
+  History,
+  Lock,
+  MessageSquarePlus,
+  PauseCircle,
+  PlayCircle,
+  Printer,
+  ShieldCheck,
+  Trash2,
+  Upload,
+  X,
+} from 'lucide-react';
+import {
+  ALLOWED_PHOTO_TYPES,
+  isSupervisorRole,
+  MAX_PHOTO_BYTES,
+  MAX_PHOTOS_PER_KIND,
+  TRANSITIONS,
+  type RequestPriority,
+} from '../../shared/domain';
 import { useAuth } from '../context/AuthContext';
 import { useRequests } from '../context/RequestContext';
 import { translations } from '../i18n/translations';
-import { MaintenanceRequest, PhotoAttachment } from '../types';
-import { 
-  X, 
-  CheckCircle2, 
-  Clock, 
-  ClipboardList, 
-  Camera, 
-  Upload, 
-  Printer, 
-  History, 
-  AlertCircle, 
-  ShieldCheck, 
-  Trash2,
-  Lock
-} from 'lucide-react';
-import { PhotoLightbox } from './PhotoLightbox';
+import {
+  locationLabel,
+  PRIORITY_STYLE,
+  priorityBadge,
+  priorityOptions,
+  prioritySla,
+  requestCategoryLabel,
+  STATUS_STYLE,
+  statusHelp,
+  statusLabel,
+  ticketLabel,
+  type Dict,
+} from '../lib/labels';
+import { auditActionLabel, auditDetailsText, auditRoleLabel } from '../lib/auditText';
+import { notesToHtml } from '../lib/richText';
+import { formatCancunDateTime } from '../lib/time';
+import { db } from '../services/firebase';
+import { PhotoValidationError, subscribeAudit } from '../services/requests';
+import type { AuditLogEntry, Language, MaintenanceRequest, PhotoAttachment, PhotoKind } from '../types';
+import { PhotoLightbox, PhotoThumb } from './PhotoLightbox';
+import { TicketTimer } from './TicketTimer';
 
 interface RequestDetailModalProps {
   request: MaintenanceRequest | null;
   onClose: () => void;
 }
 
-export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({
-  request,
-  onClose,
-}) => {
-  const { currentUser, role, language } = useAuth();
-  const { 
-    acknowledgeRequest, 
-    completeRequest, 
-    reassignSupervisor, 
-    usersList 
-  } = useRequests();
-  const t = translations[language];
+interface PendingFile {
+  id: string;
+  file: File;
+  previewUrl: string;
+}
 
-  const [lightboxPhoto, setLightboxPhoto] = useState<PhotoAttachment | null>(null);
-  const [activeTab, setActiveTab] = useState<'details' | 'audit'>('details');
 
-  const [ackNotes, setAckNotes] = useState('');
-  const [completedByName, setCompletedByName] = useState(currentUser?.displayName || 'Randel Can Chuc');
-  const [completionNotes, setCompletionNotes] = useState('');
-  const [afterPhotos, setAfterPhotos] = useState<{ id: string; file: File; previewUrl: string }[]>([]);
-  const [selectedSupervisorId, setSelectedSupervisorId] = useState(request?.assignedSupervisorId || '');
-  
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+function photoErrorText(t: Dict, err: PhotoValidationError, count: number) {
+  if (err.reason === 'too_many') return t.photoCountLimit.replace('{count}', String(count));
+  if (err.reason === 'too_large') return t.photoSizeError.replace('{name}', err.fileName ?? '');
+  return t.photoFormatError.replace('{name}', err.fileName ?? '');
+}
 
-  const afterFileInputRef = useRef<HTMLInputElement>(null);
-  const afterCameraInputRef = useRef<HTMLInputElement>(null);
+/** Small file picker (camera + files) with previews, shared by before/after photo inputs. */
+const PhotoPicker: React.FC<{
+  files: PendingFile[];
+  setFiles: React.Dispatch<React.SetStateAction<PendingFile[]>>;
+  maxFiles: number;
+  language: Language;
+  t: Dict;
+  onError: (msg: string | null) => void;
+  /** Rendered at the right end of the camera/files row (e.g. a submit button). */
+  trailing?: React.ReactNode;
+}> = ({ files, setFiles, maxFiles, language, t, onError, trailing }) => {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const es = language === 'es';
 
-  if (!request) return null;
-
-  const isSupervisorOrAdmin = role === 'supervisor' || role === 'admin';
-  const supervisors = usersList.filter((u) => u.role === 'supervisor' || u.role === 'admin');
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return {
-          label: t.statusCompleted,
-          bg: 'bg-[#E6F4EA] text-[#137333] border-[#CEEAD6]',
-          icon: CheckCircle2,
-        };
-      case 'acknowledged':
-        return {
-          label: t.statusAcknowledged,
-          bg: 'bg-[#E8F0FE] text-[#1A73E8] border-[#D2E3FC]',
-          icon: ClipboardList,
-        };
-      default:
-        return {
-          label: t.statusPending,
-          bg: 'bg-[#FEF7E0] text-[#E37400] border-[#FEEFC3]',
-          icon: Clock,
-        };
+  const add = (list: FileList | null) => {
+    if (!list) return;
+    onError(null);
+    const slots = maxFiles - files.length;
+    if (slots <= 0) return onError(t.photoCountLimit.replace('{count}', String(files.length)));
+    const next: PendingFile[] = [];
+    for (const file of Array.from(list).slice(0, slots)) {
+      if (!(ALLOWED_PHOTO_TYPES as readonly string[]).includes(file.type)) return onError(t.photoFormatError.replace('{name}', file.name));
+      if (file.size > MAX_PHOTO_BYTES) return onError(t.photoSizeError.replace('{name}', file.name));
+      next.push({ id: Math.random().toString(36).slice(2, 9), file, previewUrl: URL.createObjectURL(file) });
     }
+    setFiles((prev) => [...prev, ...next]);
   };
 
-  const statusBadge = getStatusBadge(request.status);
-  const StatusIcon = statusBadge.icon;
-
-  const beforePhotos = request.photos.filter((p) => p.type === 'before');
-  const afterPhotosList = request.photos.filter((p) => p.type === 'after');
-
-  const getCategoryTitle = (catKey: string) => {
-    const key = `cat${catKey.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join('')}`;
-    return (t as any)[key] || catKey.replace('_', ' ');
-  };
-
-  const getPriorityInfo = (pri: string) => {
-    switch (pri) {
-      case 'urgent':
-        return { label: t.pBadgeUrgent, sla: t.slaUrgent, color: 'text-[#D93025] bg-[#FCE8E6]' };
-      case 'high':
-        return { label: t.pBadgeHigh, sla: t.slaHigh, color: 'text-[#E37400] bg-[#FEF7E0]' };
-      case 'normal':
-        return { label: t.pBadgeNormal, sla: t.slaNormal, color: 'text-[#6D4627] bg-[#F4EFEA]' };
-      default:
-        return { label: t.pBadgeLow, sla: t.slaLow, color: 'text-[#70757A] bg-[#F1F3F4]' };
-    }
-  };
-
-  const priInfo = getPriorityInfo(request.priority);
-
-  const handleAcknowledge = async () => {
-    setIsProcessing(true);
-    setActionError(null);
-    try {
-      await acknowledgeRequest(request.id, ackNotes.trim() || undefined);
-      setActionSuccess(t.acknowledgeSuccess);
-    } catch (err: any) {
-      setActionError(err?.message || 'Failed to acknowledge');
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleComplete = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!completionNotes.trim()) {
-      setActionError(
-        language === 'es'
-          ? 'Por favor ingrese las notas de resolución.'
-          : 'Please enter resolution notes.'
-      );
-      return;
-    }
-    if (!completedByName.trim()) {
-      setActionError(
-        language === 'es'
-          ? 'Por favor ingrese el nombre del personal que ejecutó el trabajo.'
-          : 'Please enter the technician or personnel name.'
-      );
-      return;
-    }
-
-    setIsProcessing(true);
-    setActionError(null);
-    try {
-      const files = afterPhotos.map((p) => p.file);
-      await completeRequest(
-        request.id,
-        completedByName.trim(),
-        completionNotes.trim(),
-        files
-      );
-      setActionSuccess(t.completionSuccess);
-    } catch (err: any) {
-      setActionError(err?.message || 'Failed to complete work order');
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleAfterFilesAdded = (files: FileList | null) => {
-    if (!files) return;
-    setActionError(null);
-    const allowed = ['image/jpeg', 'image/png', 'image/webp'];
-    const maxSlot = 5 - afterPhotos.length;
-    if (maxSlot <= 0) {
-      setActionError(t.photoCountLimit.replace('{count}', String(afterPhotos.length)));
-      return;
-    }
-
-    const newItems: { id: string; file: File; previewUrl: string }[] = [];
-    for (const file of Array.from(files).slice(0, maxSlot)) {
-      if (!allowed.includes(file.type)) {
-        setActionError(t.photoFormatError.replace('{name}', file.name));
-        return;
-      }
-      if (file.size > 5 * 1024 * 1024) {
-        setActionError(t.photoSizeError.replace('{name}', file.name));
-        return;
-      }
-      newItems.push({
-        id: Math.random().toString(36).substring(2, 9),
-        file,
-        previewUrl: URL.createObjectURL(file),
-      });
-    }
-    setAfterPhotos((prev) => [...prev, ...newItems]);
-  };
-
-  const handleRemoveAfterPhoto = (id: string) => {
-    setAfterPhotos((prev) => {
+  const remove = (id: string) =>
+    setFiles((prev) => {
       const m = prev.find((p) => p.id === id);
       if (m) URL.revokeObjectURL(m.previewUrl);
       return prev.filter((p) => p.id !== id);
     });
+
+  const reset = (e: React.ChangeEvent<HTMLInputElement>) => {
+    add(e.target.files);
+    e.target.value = '';
   };
 
-  const handleReassign = async () => {
-    if (!selectedSupervisorId || selectedSupervisorId === request.assignedSupervisorId) return;
-    const match = supervisors.find((s) => s.uid === selectedSupervisorId);
-    if (!match) return;
+  return (
+    <div className="space-y-2">
+      <input ref={fileRef} type="file" multiple accept={ALLOWED_PHOTO_TYPES.join(',')} className="hidden" onChange={reset} />
+      <input ref={cameraRef} type="file" accept={ALLOWED_PHOTO_TYPES.join(',')} capture="environment" className="hidden" onChange={reset} />
+      {(files.length < maxFiles || trailing) && (
+        <div className="flex flex-wrap items-center gap-2">
+          {files.length < maxFiles && (
+            <>
+              <button
+                type="button"
+                onClick={() => cameraRef.current?.click()}
+                className="px-2.5 py-1 bg-[#F3F3F1] hover:bg-[#E9E9E6] border border-[#DADCE0] rounded text-xs font-medium flex items-center gap-1 cursor-pointer"
+              >
+                <Camera className="w-3.5 h-3.5 text-[#6D4627]" />
+                <span>{es ? 'Cámara' : 'Camera'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                className="px-2.5 py-1 bg-[#F3F3F1] hover:bg-[#E9E9E6] border border-[#DADCE0] rounded text-xs font-medium flex items-center gap-1 cursor-pointer"
+              >
+                <Upload className="w-3.5 h-3.5 text-[#5F6368]" />
+                <span>{es ? 'Archivos' : 'Files'}</span>
+              </button>
+              <span className="text-[11px] text-[#5F6368]">
+                {files.length}/{maxFiles}
+              </span>
+            </>
+          )}
+          {trailing && <div className="ml-auto">{trailing}</div>}
+        </div>
+      )}
+      {files.length > 0 && (
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+          {files.map((item) => (
+            <div key={item.id} className="relative border border-[#DADCE0] rounded overflow-hidden aspect-square">
+              <img src={item.previewUrl} alt={item.file.name} className="w-full h-full object-cover" />
+              <button
+                type="button"
+                onClick={() => remove(item.id)}
+                className="absolute top-1 right-1 p-1 bg-[#D93025] text-white rounded-full hover:bg-red-700"
+                title={t.removePhoto}
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
-    setIsProcessing(true);
+const PhotoGrid: React.FC<{ photos: PhotoAttachment[]; onOpen: (p: PhotoAttachment) => void; emptyText: string }> = ({
+  photos,
+  onOpen,
+  emptyText,
+}) =>
+  photos.length === 0 ? (
+    <div className="text-xs text-[#70757A] italic py-1">{emptyText}</div>
+  ) : (
+    <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+      {photos.map((p) => (
+        <PhotoThumb key={p.id} photo={p} onClick={() => onOpen(p)} />
+      ))}
+    </div>
+  );
+
+export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request, onClose }) => {
+  const { currentUser, role, language } = useAuth();
+  const { changeStatus, changePriority, reassign, addNote, addPhotos, assignableSupervisors, isSubmitting } = useRequests();
+  const t = translations[language];
+  const es = language === 'es';
+
+  const [activeTab, setActiveTab] = useState<'details' | 'audit'>('details');
+  const [audit, setAudit] = useState<AuditLogEntry[] | null>(null);
+  const [lightboxPhoto, setLightboxPhoto] = useState<PhotoAttachment | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+
+  const [pendingReason, setPendingReason] = useState('');
+  const [showPendingForm, setShowPendingForm] = useState(false);
+  const [showPriorityForm, setShowPriorityForm] = useState(false);
+  const [newPriority, setNewPriority] = useState<RequestPriority>(request?.priority ?? 'normal');
+  const [completionNotes, setCompletionNotes] = useState('');
+  const [afterFiles, setAfterFiles] = useState<PendingFile[]>([]);
+  const [beforeFiles, setBeforeFiles] = useState<PendingFile[]>([]);
+  const [noteText, setNoteText] = useState('');
+  const [reassignTo, setReassignTo] = useState('');
+
+  const reqId = request?.id;
+  useEffect(() => {
+    if (!reqId) return;
+    setAudit(null);
+    return subscribeAudit(db(), reqId, setAudit, (err) => {
+      console.error('Could not load audit history', err);
+      setAudit([]);
+    });
+  }, [reqId]);
+
+  // Release object URLs when the modal closes.
+  useEffect(
+    () => () => {
+      afterFiles.forEach((f) => URL.revokeObjectURL(f.previewUrl));
+      beforeFiles.forEach((f) => URL.revokeObjectURL(f.previewUrl));
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  if (!request || !currentUser) return null;
+
+  const isSupervisor = isSupervisorRole(role);
+  const isSubmitter = request.submittedBy.uid === currentUser.uid;
+  const isOpen = request.status !== 'completada';
+  const allowed = isSupervisor ? TRANSITIONS[request.status] : [];
+  const canAddNote = isSupervisor ? isOpen : isSubmitter && request.status === 'sin_revisar';
+  const canAddBeforePhotos = isSubmitter && request.status === 'sin_revisar' && request.beforePhotos.length < MAX_PHOTOS_PER_KIND;
+  const reassignOptions = assignableSupervisors.filter((s) => s.email !== request.assignedTo?.email);
+
+  const run = async (fn: () => Promise<string | null>) => {
+    setActionError(null);
+    setActionSuccess(null);
     try {
-      await reassignSupervisor(request.id, match.uid, match.displayName);
-      setActionSuccess(language === 'es' ? 'Supervisor reasignado.' : 'Supervisor reassigned.');
-    } catch (err: any) {
-      setActionError(err?.message || 'Error reassigning supervisor');
-    } finally {
-      setIsProcessing(false);
+      const msg = await fn();
+      if (msg) setActionSuccess(msg);
+    } catch (err) {
+      if (err instanceof PhotoValidationError) {
+        setActionError(photoErrorText(t, err, MAX_PHOTOS_PER_KIND));
+      } else {
+        console.error('Action failed', err);
+        setActionError(es ? 'No se pudo guardar el cambio. Intente de nuevo.' : 'Could not save the change. Please try again.');
+      }
     }
   };
+
+  const failedText = (failed: string[]) => failed.map((n) => t.photoUploadFailed.replace('{name}', n)).join(' ');
+
+  const handleTransition = (to: 'pendiente' | 'reconocida') =>
+    run(async () => {
+      await changeStatus(request, to, { note: to === 'pendiente' ? pendingReason : undefined });
+      setPendingReason('');
+      setShowPendingForm(false);
+      return t.statusChangeSuccess;
+    });
+
+  const handleSavePriority = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPriority === request.priority) return;
+    return run(async () => {
+      await changePriority(request, newPriority);
+      setShowPriorityForm(false);
+      return t.priorityChangeSuccess;
+    });
+  };
+
+  const handleMarkPending = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pendingReason.trim()) {
+      setActionError(t.pendingReasonRequired);
+      return;
+    }
+    return handleTransition('pendiente');
+  };
+
+  const handleComplete = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!completionNotes.trim()) {
+      setActionError(es ? 'Por favor ingrese las notas de resolución.' : 'Please enter resolution notes.');
+      return;
+    }
+    return run(async () => {
+      const { failedPhotos } = await changeStatus(request, 'completada', {
+        resolutionNotes: completionNotes,
+        afterPhotoFiles: afterFiles.map((f) => f.file),
+      });
+      afterFiles.forEach((f) => URL.revokeObjectURL(f.previewUrl));
+      setAfterFiles([]);
+      setCompletionNotes('');
+      return [t.completionSuccess, failedText(failedPhotos)].filter(Boolean).join(' ');
+    });
+  };
+
+  const handleAddPhotos = (kind: PhotoKind, files: PendingFile[], clear: () => void) =>
+    run(async () => {
+      const { failedPhotos } = await addPhotos(request, kind, files.map((f) => f.file));
+      files.forEach((f) => URL.revokeObjectURL(f.previewUrl));
+      clear();
+      return failedPhotos.length ? failedText(failedPhotos) : es ? 'Fotos agregadas.' : 'Photos added.';
+    });
+
+  const handleNote = () =>
+    run(async () => {
+      await addNote(request.id, noteText);
+      setNoteText('');
+      return t.noteAddedSuccess;
+    });
+
+  const handleReassign = () =>
+    run(async () => {
+      const target = assignableSupervisors.find((s) => s.email === reassignTo);
+      if (!target) return null;
+      await reassign(request, { email: target.email, name: target.displayName });
+      setReassignTo('');
+      return t.reassignSuccess;
+    });
+
+  const progression: { key: MaintenanceRequest['status']; reached: boolean }[] = [
+    { key: 'sin_revisar', reached: true },
+    { key: 'pendiente', reached: request.status === 'pendiente' },
+    { key: 'reconocida', reached: request.status === 'reconocida' || request.status === 'completada' },
+    { key: 'completada', reached: request.status === 'completada' },
+  ];
+
+  const attr = (label: string, value: React.ReactNode) => (
+    <div className="bg-white border border-[#DADCE0] p-2.5 rounded">
+      <span className="text-[#5F6368] text-[10px] uppercase font-semibold block">{label}</span>
+      <div className="font-medium text-[#202124] mt-0.5">{value}</div>
+    </div>
+  );
 
   return (
     <>
       <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-2xs flex items-center justify-center p-3 sm:p-6 print:p-0 print:bg-white">
         <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full border border-[#DADCE0] overflow-hidden my-auto max-h-[94vh] flex flex-col print:border-none print:shadow-none print:max-w-full print:max-h-none">
-          {/* Modal Header */}
+          {/* Header */}
           <div className="px-5 py-3.5 border-b border-[#DADCE0] flex items-center justify-between bg-[#FAFAFA] print:bg-white">
-            <div className="flex items-center gap-2.5">
-              <span className="font-mono text-base sm:text-lg font-bold text-[#202124]">
-                {request.ticketId}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`font-mono text-base sm:text-lg font-bold ${request.ticketId ? 'text-[#202124]' : 'text-[#70757A] italic'}`}>
+                {ticketLabel(t, request)}
               </span>
-              <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium border flex items-center gap-1 ${statusBadge.bg}`}>
-                <StatusIcon className="w-3.5 h-3.5" />
-                <span>{statusBadge.label}</span>
+              <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${STATUS_STYLE[request.status]}`} title={statusHelp(t, request.status)}>
+                {statusLabel(t, request.status)}
               </span>
               <span className="px-2 py-0.5 rounded text-xs font-bold uppercase bg-[#F4EFEA] text-[#6D4627]">
-                {request.villaName}
+                {locationLabel(t, request.location.code, request.location.name)}
               </span>
             </div>
-
             <div className="flex items-center gap-1.5 print:hidden">
-              <button
-                onClick={() => window.print()}
-                className="p-1.5 text-[#5F6368] hover:text-[#202124] hover:bg-[#F3F3F1] rounded transition-colors cursor-pointer"
-                title={t.print}
-              >
+              <button onClick={() => window.print()} className="p-1.5 text-[#5F6368] hover:text-[#202124] hover:bg-[#F3F3F1] rounded cursor-pointer" title={t.print}>
                 <Printer className="w-4 h-4" />
               </button>
-              <button
-                onClick={onClose}
-                className="p-1.5 text-[#5F6368] hover:text-[#202124] hover:bg-[#F3F3F1] rounded transition-colors cursor-pointer"
-              >
+              <button onClick={onClose} className="p-1.5 text-[#5F6368] hover:text-[#202124] hover:bg-[#F3F3F1] rounded cursor-pointer" aria-label={t.close}>
                 <X className="w-5 h-5" />
               </button>
             </div>
           </div>
 
-          {/* Tab Navigation */}
+          {/* Tabs */}
           <div className="flex border-b border-[#DADCE0] px-5 bg-white text-xs font-medium print:hidden">
-            <button
-              onClick={() => setActiveTab('details')}
-              className={`py-2 px-3 border-b-2 font-semibold cursor-pointer transition-colors ${
-                activeTab === 'details'
-                  ? 'border-[#6D4627] text-[#6D4627]'
-                  : 'border-transparent text-[#5F6368] hover:text-[#202124]'
-              }`}
-            >
-              {t.requestDetailTitle}
-            </button>
-            <button
-              onClick={() => setActiveTab('audit')}
-              className={`py-2 px-3 border-b-2 font-semibold cursor-pointer transition-colors flex items-center gap-1.5 ${
-                activeTab === 'audit'
-                  ? 'border-[#6D4627] text-[#6D4627]'
-                  : 'border-transparent text-[#5F6368] hover:text-[#202124]'
-              }`}
-            >
-              <History className="w-3.5 h-3.5" />
-              <span>{t.auditTrailTitle}</span>
-              <span className="px-1.5 py-0.2 rounded-full bg-[#F3F3F1] text-[10px]">
-                {request.auditTrail.length}
-              </span>
-            </button>
+            {(['details', 'audit'] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`py-2 px-3 border-b-2 font-semibold cursor-pointer flex items-center gap-1.5 ${
+                  activeTab === tab ? 'border-[#6D4627] text-[#6D4627]' : 'border-transparent text-[#5F6368] hover:text-[#202124]'
+                }`}
+              >
+                {tab === 'audit' && <History className="w-3.5 h-3.5" />}
+                <span>{tab === 'details' ? t.requestDetailTitle : t.auditTrailTitle}</span>
+                {tab === 'audit' && audit && <span className="px-1.5 rounded-full bg-[#F3F3F1] text-[10px]">{audit.length}</span>}
+              </button>
+            ))}
           </div>
 
-          {/* Modal Content */}
           <div className="overflow-y-auto p-5 space-y-4 text-xs sm:text-sm">
             {actionError && (
               <div className="p-2.5 bg-[#FCE8E6] border border-[#FAD2CF] rounded text-[#D93025] flex items-start gap-2 text-xs">
@@ -290,476 +387,405 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({
             )}
 
             {activeTab === 'audit' ? (
-              /* Audit Trail Timeline */
-              <div className="space-y-3">
-                <div className="relative pl-6 space-y-4 before:content-[''] before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-[#DADCE0]">
-                  {request.auditTrail.map((entry, index) => (
-                    <div key={entry.id || index} className="relative">
-                      <div className="absolute -left-6 top-1 w-5 h-5 rounded-full bg-white border-2 border-[#6D4627] flex items-center justify-center">
-                        <div className="w-1.5 h-1.5 rounded-full bg-[#6D4627]" />
+              <div className="relative pl-6 space-y-3 before:content-[''] before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-[#DADCE0]">
+                {audit === null && <div className="text-[#5F6368]">{t.loading}</div>}
+                {audit?.map((entry) => (
+                  <div key={entry.id} className="relative">
+                    <div className="absolute -left-6 top-1 w-5 h-5 rounded-full bg-white border-2 border-[#6D4627] flex items-center justify-center">
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#6D4627]" />
+                    </div>
+                    <div className="bg-[#F3F3F1] border border-[#DADCE0] p-2.5 rounded text-xs space-y-0.5">
+                      <div className="flex items-center justify-between gap-2 text-[#5F6368]">
+                        <span className="font-semibold text-[#202124] uppercase text-[10px]">
+                          {auditActionLabel(entry.action, language)}
+                          {entry.action === 'status_changed' && entry.fromStatus && entry.toStatus && (
+                            <span className="normal-case font-normal">
+                              {' '}
+                              · {statusLabel(t, entry.fromStatus)} → {statusLabel(t, entry.toStatus)}
+                            </span>
+                          )}
+                        </span>
+                        <span className="font-mono text-[11px] whitespace-nowrap">{entry.at ? formatCancunDateTime(entry.at, language) : '…'}</span>
                       </div>
-                      <div className="bg-[#F3F3F1] border border-[#DADCE0] p-2.5 rounded text-xs space-y-0.5">
-                        <div className="flex items-center justify-between text-[#5F6368]">
-                          <span className="font-semibold text-[#202124] uppercase text-[10px]">
-                            {entry.action.replace('_', ' ')}
-                          </span>
-                          <span className="font-mono text-[11px]">
-                            {new Date(entry.timestamp).toLocaleString(language === 'es' ? 'es-MX' : 'en-US')}
-                          </span>
-                        </div>
-                        <div className="text-[#202124] font-medium">
-                          {entry.details}
-                        </div>
-                        <div className="text-[11px] text-[#5F6368]">
-                          {entry.performedByName} ({entry.performedByRole})
-                        </div>
+                      {entry.details && <div className="text-[#202124] whitespace-pre-wrap">{auditDetailsText(t, language, entry)}</div>}
+                      <div className="text-[11px] text-[#5F6368]">
+                        {entry.by.name} ({auditRoleLabel(entry.by.role, language)})
                       </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <>
+                {/* Lifecycle progression */}
+                <div className="grid grid-cols-4 gap-1.5 text-center text-[11px]">
+                  {progression.map((p) => (
+                    <div
+                      key={p.key}
+                      title={statusHelp(t, p.key)}
+                      className={`p-1.5 rounded border font-medium ${
+                        request.status === p.key ? `${STATUS_STYLE[p.key]} font-bold` : p.reached ? 'bg-white border-[#DADCE0] text-[#137333]' : 'bg-[#FAFAFA] border-[#DADCE0] text-[#70757A]'
+                      }`}
+                    >
+                      {statusLabel(t, p.key)}
                     </div>
                   ))}
                 </div>
-              </div>
-            ) : (
-              /* Details View */
-              <>
-                {/* Progression Bar */}
-                <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                  <div
-                    className={`p-2 rounded border font-medium ${
-                      request.status === 'pending'
-                        ? 'bg-[#FEF7E0] border-[#E37400] text-[#E37400] font-bold'
-                        : 'bg-white border-[#DADCE0] text-[#137333]'
-                    }`}
-                  >
-                    1. {t.statusPending}
-                  </div>
-                  <div
-                    className={`p-2 rounded border font-medium ${
-                      request.status === 'acknowledged'
-                        ? 'bg-[#E8F0FE] border-[#1A73E8] text-[#1A73E8] font-bold'
-                        : request.status === 'completed'
-                        ? 'bg-white border-[#DADCE0] text-[#137333]'
-                        : 'bg-[#FAFAFA] border-[#DADCE0] text-[#70757A]'
-                    }`}
-                  >
-                    2. {t.statusAcknowledged}
-                  </div>
-                  <div
-                    className={`p-2 rounded border font-medium ${
-                      request.status === 'completed'
-                        ? 'bg-[#E6F4EA] border-[#137333] text-[#137333] font-bold'
-                        : 'bg-[#FAFAFA] border-[#DADCE0] text-[#70757A]'
-                    }`}
-                  >
-                    3. {t.statusCompleted}
-                  </div>
-                </div>
 
-                {/* Attributes Grid */}
+                <TicketTimer request={request} audit={audit} t={t} />
+
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
-                  <div className="bg-white border border-[#DADCE0] p-2.5 rounded">
-                    <span className="text-[#5F6368] text-[10px] uppercase font-semibold block">
-                      {t.filterVilla}
-                    </span>
-                    <span className="font-bold text-sm text-[#6D4627]">
-                      {request.villaName}
-                    </span>
-                  </div>
-
-                  <div className="bg-white border border-[#DADCE0] p-2.5 rounded">
-                    <span className="text-[#5F6368] text-[10px] uppercase font-semibold block">
-                      {t.filterCategory}
-                    </span>
-                    <div className="font-medium text-[#202124]">
-                      {getCategoryTitle(request.category)}
-                      {request.commonAreaSubLocation && (
-                        <span className="text-[10px] text-[#6D4627] font-semibold block">
-                          ({request.commonAreaSubLocation === 'hall' ? t.subLocHall : t.subLocParking})
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="bg-white border border-[#DADCE0] p-2.5 rounded">
-                    <span className="text-[#5F6368] text-[10px] uppercase font-semibold block">
-                      {t.filterPriority}
-                    </span>
-                    <div className="flex items-center gap-1 mt-0.5">
-                      <span className={`px-1.5 py-0.5 rounded text-[11px] font-bold uppercase ${priInfo.color}`}>
-                        {priInfo.label}
-                      </span>
-                      <span className="text-[10px] text-[#5F6368]">
-                        ({priInfo.sla})
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="bg-white border border-[#DADCE0] p-2.5 rounded">
-                    <span className="text-[#5F6368] text-[10px] uppercase font-semibold block">
-                      {t.assignedSupervisorLabel}
-                    </span>
-                    <span className="font-medium text-[#202124]">
-                      {request.assignedSupervisorName || (
-                        <span className="italic text-[#70757A]">{t.notAssignedYet}</span>
-                      )}
-                    </span>
-                  </div>
+                  {attr(t.filterVilla, <span className="font-bold text-[#6D4627]">{locationLabel(t, request.location.code, request.location.name)}</span>)}
+                  {attr(t.filterCategory, requestCategoryLabel(t, request))}
+                  {attr(
+                    t.filterPriority,
+                    <span className="flex flex-wrap items-center gap-1">
+                      <span className={`px-1.5 py-0.5 rounded text-[11px] font-bold uppercase ${PRIORITY_STYLE[request.priority]}`}>{priorityBadge(t, request.priority)}</span>
+                      <span className="text-[10px] text-[#5F6368]">({prioritySla(t, request.priority)})</span>
+                    </span>,
+                  )}
+                  {attr(t.assignedSupervisorLabel, request.assignedTo?.name ?? <span className="italic text-[#70757A]">{t.notAssignedYet}</span>)}
                 </div>
 
-                {/* Location Detail & Description */}
                 <div className="bg-white border border-[#DADCE0] p-3.5 rounded-lg space-y-2">
+                  {request.locationDetail && (
+                    <div className="pb-2 border-b border-[#DADCE0]">
+                      <span className="text-[#5F6368] text-xs font-semibold uppercase block">{t.locationDetailLabel}</span>
+                      <div className="font-medium text-[#202124] mt-0.5">{request.locationDetail}</div>
+                    </div>
+                  )}
                   <div>
-                    <span className="text-[#5F6368] text-xs font-semibold uppercase block">
-                      {t.locationDetailLabel}
-                    </span>
-                    <div className="font-medium text-[#202124] mt-0.5">
-                      {request.locationDetail}
-                    </div>
+                    <span className="text-[#5F6368] text-xs font-semibold uppercase block">{t.notesLabel}</span>
+                    <div
+                      className="rich-text text-[#202124] mt-0.5 leading-relaxed break-words"
+                      dangerouslySetInnerHTML={{ __html: notesToHtml(request.notes) }}
+                    />
                   </div>
-
-                  <div className="pt-2 border-t border-[#DADCE0]">
-                    <span className="text-[#5F6368] text-xs font-semibold uppercase block">
-                      {t.notesLabel}
-                    </span>
-                    <div className="text-[#202124] whitespace-pre-wrap mt-0.5 leading-relaxed">
-                      {request.notes}
-                    </div>
-                  </div>
-
-                  <div className="pt-2 border-t border-[#DADCE0] flex flex-wrap items-center justify-between text-[11px] text-[#5F6368]">
+                  <div className="pt-2 border-t border-[#DADCE0] flex flex-wrap gap-x-4 gap-y-1 justify-between text-[11px] text-[#5F6368]">
                     <span>
                       {t.submittedByLabel}: <strong className="text-[#202124]">{request.submittedBy.name}</strong>
                     </span>
                     <span>
-                      {t.submissionTimeLabel}: {new Date(request.createdAt).toLocaleString(language === 'es' ? 'es-MX' : 'en-US')}
+                      {t.submissionTimeLabel}: {formatCancunDateTime(request.createdAt, language)}
                     </span>
                   </div>
                 </div>
 
-                {/* Before Photos */}
+                {/* Before photos */}
                 <div className="border border-[#DADCE0] rounded-lg p-3 bg-[#FAFAFA] space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-xs text-[#202124] flex items-center gap-1.5">
                       <Camera className="w-3.5 h-3.5 text-[#6D4627]" />
-                      <span>{t.beforePhotosTitle}</span>
+                      {t.beforePhotosTitle}
                     </span>
-                    <span className="text-xs text-[#5F6368]">
-                      {beforePhotos.length}
-                    </span>
+                    <span className="text-xs text-[#5F6368]">{request.beforePhotos.length}</span>
                   </div>
-
-                  {beforePhotos.length === 0 ? (
-                    <div className="text-xs text-[#70757A] italic py-1">
-                      {t.noPhotosAttached}
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                      {beforePhotos.map((photo, i) => (
-                        <div
-                          key={photo.id}
-                          onClick={() => setLightboxPhoto(photo)}
-                          className="relative group border border-[#DADCE0] rounded overflow-hidden aspect-square cursor-pointer"
+                  <PhotoGrid photos={request.beforePhotos} onOpen={setLightboxPhoto} emptyText={t.noPhotosAttached} />
+                  {canAddBeforePhotos && (
+                    <div className="pt-2 border-t border-[#DADCE0] space-y-2 print:hidden">
+                      <PhotoPicker
+                        files={beforeFiles}
+                        setFiles={setBeforeFiles}
+                        maxFiles={MAX_PHOTOS_PER_KIND - request.beforePhotos.length}
+                        language={language}
+                        t={t}
+                        onError={setActionError}
+                      />
+                      {beforeFiles.length > 0 && (
+                        <button
+                          type="button"
+                          disabled={isSubmitting}
+                          onClick={() => handleAddPhotos('before', beforeFiles, () => setBeforeFiles([]))}
+                          className="px-3 py-1 bg-[#6D4627] hover:bg-[#55361D] text-white rounded text-xs font-semibold cursor-pointer disabled:opacity-50"
                         >
-                          <img
-                            src={photo.url}
-                            alt={photo.fileName}
-                            className="w-full h-full object-cover"
-                          />
-                          <span className="absolute bottom-1 left-1 bg-black/70 text-white text-[9px] px-1 rounded">
-                            #{i + 1}
-                          </span>
-                        </div>
-                      ))}
+                          {es ? 'Subir fotos' : 'Upload photos'}
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
 
-                {/* After Photos */}
-                {afterPhotosList.length > 0 && (
+                {/* Add a note (below the initial photos, above the supervisor actions) */}
+                {canAddNote && (
+                  <div className="flex items-start gap-2 print:hidden">
+                    <textarea
+                      rows={1}
+                      value={noteText}
+                      onChange={(e) => setNoteText(e.target.value)}
+                      maxLength={2000}
+                      placeholder={es ? 'Agregar una nota al historial...' : 'Add a note to the history...'}
+                      className="flex-1 bg-white border border-[#DADCE0] rounded px-3 py-1.5 text-xs focus:outline-hidden focus:border-[#1A73E8]"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleNote}
+                      disabled={isSubmitting || !noteText.trim()}
+                      className="px-3 py-1.5 bg-white hover:bg-[#F3F3F1] border border-[#DADCE0] rounded text-xs font-medium flex items-center gap-1 disabled:opacity-40 cursor-pointer"
+                    >
+                      <MessageSquarePlus className="w-3.5 h-3.5" />
+                      {t.addNoteAction}
+                    </button>
+                  </div>
+                )}
+
+                {request.afterPhotos.length > 0 && (
                   <div className="border border-[#137333]/30 rounded-lg p-3 bg-[#E6F4EA]/20 space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-xs text-[#137333] flex items-center gap-1.5">
                         <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>{t.afterPhotosTitle}</span>
+                        {t.afterPhotosTitle}
                       </span>
-                      <span className="text-xs text-[#137333]">
-                        {afterPhotosList.length}
-                      </span>
+                      <span className="text-xs text-[#137333]">{request.afterPhotos.length}</span>
                     </div>
+                    <PhotoGrid photos={request.afterPhotos} onOpen={setLightboxPhoto} emptyText={t.noPhotosAttached} />
+                  </div>
+                )}
 
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                      {afterPhotosList.map((photo, i) => (
-                        <div
-                          key={photo.id}
-                          onClick={() => setLightboxPhoto(photo)}
-                          className="relative group border border-[#CEEAD6] rounded overflow-hidden aspect-square cursor-pointer"
-                        >
-                          <img
-                            src={photo.url}
-                            alt={photo.fileName}
-                            className="w-full h-full object-cover"
-                          />
-                          <span className="absolute bottom-1 left-1 bg-[#137333] text-white text-[9px] px-1 rounded font-bold">
-                            Post #{i + 1}
-                          </span>
-                        </div>
-                      ))}
+                {/* Completed summary (everyone) */}
+                {request.status === 'completada' && (
+                  <div className="bg-[#E6F4EA] border border-[#CEEAD6] p-2.5 rounded text-xs space-y-1 text-[#137333]">
+                    {request.completedAt && (
+                      <div>
+                        <strong>{t.completedAtLabel}:</strong> {formatCancunDateTime(request.completedAt, language)}
+                      </div>
+                    )}
+                    {request.completedBy && (
+                      <div>
+                        <strong>{t.completedByLabel}:</strong> {request.completedBy.name}
+                      </div>
+                    )}
+                    {request.supervisorNotes && (
+                      <div className="pt-1 border-t border-[#CEEAD6] text-[#202124] whitespace-pre-wrap">
+                        <strong>{t.supervisorNotesLabel}:</strong> {request.supervisorNotes}
+                      </div>
+                    )}
+                    <div className="text-[10px] text-[#5F6368] pt-0.5 flex items-center gap-1">
+                      <Lock className="w-3 h-3" />
+                      <span>{t.alreadyCompletedNotice}</span>
                     </div>
                   </div>
                 )}
 
-                {/* Supervisor Workflow Actions */}
-                {isSupervisorOrAdmin && (
+                {/* Supervisor lifecycle controls (staff see none) */}
+                {isSupervisor && isOpen && (
                   <div className="border border-[#6D4627]/30 rounded-lg p-3.5 bg-[#F4EFEA]/30 space-y-3 print:hidden">
-                    <div className="flex items-center justify-between pb-1.5 border-b border-[#E8DEC9]">
-                      <div className="flex items-center gap-1.5">
-                        <ShieldCheck className="w-4 h-4 text-[#6D4627]" />
-                        <h3 className="font-semibold text-xs sm:text-sm text-[#202124]">
-                          {t.supervisorWorkflowTitle}
-                        </h3>
-                      </div>
-                      <span className="text-xs font-semibold text-[#6D4627]">
-                        {currentUser?.displayName} ({currentUser?.title})
-                      </span>
+                    <div className="flex items-center gap-1.5 pb-1.5 border-b border-[#E8DEC9]">
+                      <ShieldCheck className="w-4 h-4 text-[#6D4627]" />
+                      <h3 className="font-semibold text-xs sm:text-sm text-[#202124]">{t.supervisorWorkflowTitle}</h3>
                     </div>
 
-                    {/* Pending -> Acknowledge */}
-                    {request.status === 'pending' && (
-                      <div className="space-y-2.5">
-                        <p className="text-xs text-[#5F6368]">
-                          {t.acknowledgeHelp}
-                        </p>
-
-                        <div>
-                          <input
-                            type="text"
-                            value={ackNotes}
-                            onChange={(e) => setAckNotes(e.target.value)}
-                            placeholder={language === 'es' ? 'Notas iniciales del supervisor (opcional)...' : 'Initial supervisor notes (optional)...'}
-                            className="w-full bg-white border border-[#DADCE0] rounded px-3 py-1.5 text-xs text-[#202124] focus:outline-hidden focus:border-[#1A73E8]"
-                          />
+                    {(allowed.includes('reconocida') || allowed.includes('pendiente')) && (
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap gap-2">
+                          {allowed.includes('reconocida') && (
+                            <button
+                              type="button"
+                              disabled={isSubmitting}
+                              onClick={() => handleTransition('reconocida')}
+                              className="px-3.5 py-1.5 bg-[#1A73E8] hover:bg-[#1557B0] text-white rounded text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                            >
+                              <PlayCircle className="w-3.5 h-3.5" />
+                              {request.status === 'pendiente' ? t.actionResumeWork : t.actionStartWork}
+                            </button>
+                          )}
+                          {allowed.includes('pendiente') && (
+                            <button
+                              type="button"
+                              disabled={isSubmitting}
+                              onClick={() => {
+                                setActionError(null);
+                                setShowPriorityForm(false);
+                                setShowPendingForm((v) => !v);
+                              }}
+                              aria-expanded={showPendingForm}
+                              className={`px-3.5 py-1.5 border border-[#8430CE] text-[#8430CE] rounded text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50 ${
+                                showPendingForm ? 'bg-[#F3E8FD]' : 'bg-white hover:bg-[#F3E8FD]'
+                              }`}
+                            >
+                              <PauseCircle className="w-3.5 h-3.5" />
+                              {t.actionMarkPending}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            disabled={isSubmitting}
+                            onClick={() => {
+                              setActionError(null);
+                              setShowPendingForm(false);
+                              setNewPriority(request.priority);
+                              setShowPriorityForm((v) => !v);
+                            }}
+                            aria-expanded={showPriorityForm}
+                            className={`px-3.5 py-1.5 border border-[#DADCE0] text-[#202124] rounded text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50 ${
+                              showPriorityForm ? 'bg-[#F3F3F1]' : 'bg-white hover:bg-[#F3F3F1]'
+                            }`}
+                          >
+                            <Flag className="w-3.5 h-3.5 text-[#6D4627]" />
+                            {t.actionEditPriority}
+                          </button>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={handleAcknowledge}
-                          disabled={isProcessing}
-                          className="px-3.5 py-1.5 bg-[#1A73E8] hover:bg-[#1557B0] text-white rounded text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-                        >
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>{t.acknowledgeAction}</span>
-                        </button>
+                        {showPriorityForm && (
+                          <form onSubmit={handleSavePriority} className="bg-white p-3 rounded border border-[#DADCE0] space-y-2.5">
+                            <div>
+                              <label htmlFor="new-priority" className="block text-xs font-semibold text-[#202124] mb-1">
+                                {t.newPriorityLabel}
+                              </label>
+                              <select
+                                id="new-priority"
+                                value={newPriority}
+                                onChange={(e) => setNewPriority(e.target.value as RequestPriority)}
+                                className="w-full sm:w-auto bg-white border border-[#DADCE0] rounded px-2 py-1.5 text-xs"
+                              >
+                                {priorityOptions(t).map((p) => (
+                                  <option key={p.key} value={p.key}>
+                                    {p.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="submit"
+                                disabled={isSubmitting || newPriority === request.priority}
+                                className="px-3.5 py-1.5 bg-[#6D4627] hover:bg-[#55361D] text-white rounded text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                              >
+                                <Flag className="w-3.5 h-3.5" />
+                                {t.savePriority}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setShowPriorityForm(false)}
+                                className="px-3.5 py-1.5 bg-white hover:bg-[#F3F3F1] border border-[#DADCE0] rounded text-xs font-medium cursor-pointer"
+                              >
+                                {t.cancel}
+                              </button>
+                            </div>
+                          </form>
+                        )}
+
+                        {allowed.includes('pendiente') && showPendingForm && (
+                          <form onSubmit={handleMarkPending} className="bg-white p-3 rounded border border-[#8430CE]/40 space-y-2.5">
+                            <div>
+                              <label htmlFor="pending-reason" className="block text-xs font-semibold text-[#202124] mb-1">
+                                {t.pendingReasonLabel} <span className="text-[#D93025]">*</span>
+                              </label>
+                              <textarea
+                                id="pending-reason"
+                                rows={2}
+                                autoFocus
+                                value={pendingReason}
+                                onChange={(e) => setPendingReason(e.target.value)}
+                                placeholder={t.pendingReasonPlaceholder}
+                                maxLength={2000}
+                                required
+                                className="w-full bg-white border border-[#DADCE0] rounded px-3 py-1.5 text-xs focus:outline-hidden focus:border-[#8430CE]"
+                              />
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="submit"
+                                disabled={isSubmitting || !pendingReason.trim()}
+                                className="px-3.5 py-1.5 bg-[#8430CE] hover:bg-[#6A26A6] text-white rounded text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                              >
+                                <PauseCircle className="w-3.5 h-3.5" />
+                                {t.confirmPending}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setShowPendingForm(false);
+                                  setPendingReason('');
+                                }}
+                                className="px-3.5 py-1.5 bg-white hover:bg-[#F3F3F1] border border-[#DADCE0] rounded text-xs font-medium cursor-pointer"
+                              >
+                                {t.cancel}
+                              </button>
+                            </div>
+                          </form>
+                        )}
                       </div>
                     )}
 
-                    {/* Acknowledged -> Mark Completed */}
-                    {request.status === 'acknowledged' && (
-                      <form onSubmit={handleComplete} className="space-y-2.5">
-                        <div className="bg-white p-3 rounded border border-[#DADCE0] space-y-2.5">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="font-semibold text-[#1A73E8]">
-                              {t.acknowledgedAtLabel}: {new Date(request.acknowledgedAt || '').toLocaleDateString()}
-                            </span>
-                            <span className="text-[#5F6368]">
-                              {t.assignedSupervisorLabel}: <strong>{request.assignedSupervisorName}</strong>
-                            </span>
-                          </div>
-
-                          <div>
-                            <label className="block text-xs font-semibold text-[#202124] mb-1">
-                              {t.completedByFieldLabel} <span className="text-[#D93025]">*</span>
-                            </label>
-                            <input
-                              type="text"
-                              value={completedByName}
-                              onChange={(e) => setCompletedByName(e.target.value)}
-                              placeholder={t.completedByPlaceholder}
-                              className="w-full bg-white border border-[#DADCE0] rounded px-3 py-1.5 text-xs text-[#202124] focus:outline-hidden focus:border-[#1A73E8]"
-                              required
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-xs font-semibold text-[#202124] mb-1">
-                              {t.supervisorNotesLabel} <span className="text-[#D93025]">*</span>
-                            </label>
-                            <textarea
-                              rows={2}
-                              value={completionNotes}
-                              onChange={(e) => setCompletionNotes(e.target.value)}
-                              placeholder={t.supervisorNotesPlaceholder}
-                              className="w-full bg-white border border-[#DADCE0] rounded px-3 py-1.5 text-xs text-[#202124] focus:outline-hidden focus:border-[#1A73E8]"
-                              required
-                            />
-                          </div>
-
-                          {/* After Photos Upload */}
-                          <div>
-                            <label className="block text-xs font-semibold text-[#202124] mb-1">
-                              {t.afterPhotosUploadLabel}
-                            </label>
-                            
-                            <input
-                              ref={afterFileInputRef}
-                              type="file"
-                              multiple
-                              accept="image/jpeg,image/png,image/webp"
-                              className="hidden"
-                              onChange={(e) => {
-                                handleAfterFilesAdded(e.target.files);
-                                if (e.target) e.target.value = '';
-                              }}
-                            />
-                            <input
-                              ref={afterCameraInputRef}
-                              type="file"
-                              accept="image/jpeg,image/png,image/webp"
-                              capture="environment"
-                              className="hidden"
-                              onChange={(e) => {
-                                handleAfterFilesAdded(e.target.files);
-                                if (e.target) e.target.value = '';
-                              }}
-                            />
-
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => afterCameraInputRef.current?.click()}
-                                className="px-2.5 py-1 bg-[#F3F3F1] hover:bg-[#E9E9E6] border border-[#DADCE0] rounded text-xs font-medium text-[#202124] flex items-center gap-1 cursor-pointer"
-                              >
-                                <Camera className="w-3.5 h-3.5 text-[#6D4627]" />
-                                <span>{language === 'es' ? 'Cámara' : 'Camera'}</span>
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => afterFileInputRef.current?.click()}
-                                className="px-2.5 py-1 bg-[#F3F3F1] hover:bg-[#E9E9E6] border border-[#DADCE0] rounded text-xs font-medium text-[#202124] flex items-center gap-1 cursor-pointer"
-                              >
-                                <Upload className="w-3.5 h-3.5 text-[#5F6368]" />
-                                <span>{language === 'es' ? 'Archivos' : 'Files'}</span>
-                              </button>
-                            </div>
-
-                            {afterPhotos.length > 0 && (
-                              <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mt-2">
-                                {afterPhotos.map((item) => (
-                                  <div
-                                    key={item.id}
-                                    className="relative group border border-[#CEEAD6] rounded overflow-hidden aspect-square"
-                                  >
-                                    <img
-                                      src={item.previewUrl}
-                                      alt="After preview"
-                                      className="w-full h-full object-cover"
-                                    />
-                                    <button
-                                      type="button"
-                                      onClick={() => handleRemoveAfterPhoto(item.id)}
-                                      className="absolute top-1 right-1 p-1 bg-[#D93025] text-white rounded-full hover:bg-red-700 transition-colors"
-                                    >
-                                      <Trash2 className="w-3 h-3" />
-                                    </button>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
+                    {allowed.includes('completada') && (
+                      <form onSubmit={handleComplete} className="bg-white p-3 rounded border border-[#DADCE0] space-y-2.5">
+                        <div>
+                          <label className="block text-xs font-semibold text-[#202124] mb-1">
+                            {t.supervisorNotesLabel} <span className="text-[#D93025]">*</span>
+                          </label>
+                          <textarea
+                            rows={2}
+                            value={completionNotes}
+                            onChange={(e) => setCompletionNotes(e.target.value)}
+                            placeholder={t.supervisorNotesPlaceholder}
+                            maxLength={2000}
+                            className="w-full bg-white border border-[#DADCE0] rounded px-3 py-1.5 text-xs focus:outline-hidden focus:border-[#1A73E8]"
+                            required
+                          />
                         </div>
-
-                        <button
-                          type="submit"
-                          disabled={isProcessing}
-                          className="px-4 py-2 bg-[#137333] hover:bg-[#0E5B28] text-white rounded text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 shadow-xs"
-                        >
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>{t.confirmComplete}</span>
-                        </button>
+                        <div>
+                          <label className="block text-xs font-semibold text-[#202124] mb-1">{t.afterPhotosUploadLabel}</label>
+                          <PhotoPicker
+                            files={afterFiles}
+                            setFiles={setAfterFiles}
+                            maxFiles={MAX_PHOTOS_PER_KIND - request.afterPhotos.length}
+                            language={language}
+                            t={t}
+                            onError={setActionError}
+                            trailing={
+                              <button
+                                type="submit"
+                                disabled={isSubmitting}
+                                className="px-4 py-2 bg-[#137333] hover:bg-[#0E5B28] text-white rounded text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-xs"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                {t.confirmComplete}
+                              </button>
+                            }
+                          />
+                        </div>
                       </form>
                     )}
 
-                    {/* Completed Info */}
-                    {request.status === 'completed' && (
-                      <div className="bg-[#E6F4EA] border border-[#CEEAD6] p-2.5 rounded text-xs space-y-1 text-[#137333]">
-                        <div className="font-semibold flex items-center gap-1.5">
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>{t.statusCompleted}</span>
-                        </div>
-                        <div>
-                          <strong>{t.completedAtLabel}:</strong>{' '}
-                          {new Date(request.completedAt || '').toLocaleString(language === 'es' ? 'es-MX' : 'en-US')}
-                        </div>
-                        <div>
-                          <strong>{t.completedByLabel}:</strong> {request.completedBy?.name}
-                        </div>
-                        {request.resolutionTimeHours && (
-                          <div>
-                            <strong>{t.resolutionTimeLabel}:</strong> {request.resolutionTimeHours} {t.hoursUnit}
-                          </div>
-                        )}
-                        {request.supervisorNotes && (
-                          <div className="pt-1 border-t border-[#CEEAD6] text-[#202124]">
-                            <strong>{t.supervisorNotesLabel}:</strong> {request.supervisorNotes}
-                          </div>
-                        )}
-                        <div className="text-[10px] text-[#5F6368] pt-0.5 flex items-center gap-1">
-                          <Lock className="w-3 h-3" />
-                          <span>{t.alreadyCompletedNotice}</span>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Reassign Supervisor */}
-                    {request.status !== 'completed' && (
-                      <div className="pt-2 border-t border-[#E8DEC9] flex flex-wrap items-center gap-2 text-xs">
-                        <span className="text-[#5F6368] font-medium">{t.reassignSupervisor}:</span>
-                        <select
-                          value={selectedSupervisorId}
-                          onChange={(e) => setSelectedSupervisorId(e.target.value)}
-                          className="bg-white border border-[#DADCE0] rounded px-2 py-1 text-xs text-[#202124]"
-                        >
-                          <option value="">{t.selectSupervisorPlaceholder}</option>
-                          {supervisors.map((s) => (
-                            <option key={s.uid} value={s.uid}>
-                              {s.displayName} ({s.title})
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          onClick={handleReassign}
-                          disabled={isProcessing || !selectedSupervisorId || selectedSupervisorId === request.assignedSupervisorId}
-                          className="px-2 py-1 bg-white hover:bg-gray-100 border border-[#DADCE0] rounded text-xs font-medium text-[#202124] disabled:opacity-40 cursor-pointer"
-                        >
-                          {language === 'es' ? 'Actualizar' : 'Update'}
-                        </button>
-                      </div>
-                    )}
+                    <div className="pt-2 border-t border-[#E8DEC9] flex flex-wrap items-center gap-2 text-xs">
+                      <span className="text-[#5F6368] font-medium">{t.reassignSupervisor}:</span>
+                      <select
+                        value={reassignTo}
+                        onChange={(e) => setReassignTo(e.target.value)}
+                        className="bg-white border border-[#DADCE0] rounded px-2 py-1 text-xs"
+                      >
+                        <option value="">{t.selectSupervisorPlaceholder}</option>
+                        {reassignOptions.map((s) => (
+                          <option key={s.email} value={s.email}>
+                            {s.displayName} ({s.title})
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={handleReassign}
+                        disabled={isSubmitting || !reassignTo}
+                        className="px-2 py-1 bg-white hover:bg-gray-100 border border-[#DADCE0] rounded text-xs font-medium disabled:opacity-40 cursor-pointer"
+                      >
+                        {t.update}
+                      </button>
+                    </div>
                   </div>
                 )}
               </>
             )}
           </div>
 
-          {/* Modal Footer */}
           <div className="px-5 py-2.5 border-t border-[#DADCE0] bg-[#FAFAFA] flex items-center justify-between text-xs print:hidden">
-            <span className="text-[#5F6368] font-mono text-[11px]">
-              {request.id}
-            </span>
-            <button
-              onClick={onClose}
-              className="px-3.5 py-1.5 rounded border border-[#DADCE0] bg-white hover:bg-[#F3F3F1] text-[#202124] font-medium cursor-pointer"
-            >
+            <span className="text-[#5F6368] font-mono text-[11px]">{request.id}</span>
+            <button onClick={onClose} className="px-3.5 py-1.5 rounded border border-[#DADCE0] bg-white hover:bg-[#F3F3F1] font-medium cursor-pointer">
               {t.close}
             </button>
           </div>
         </div>
       </div>
 
-      <PhotoLightbox
-        photo={lightboxPhoto}
-        onClose={() => setLightboxPhoto(null)}
-      />
+      <PhotoLightbox photo={lightboxPhoto} language={language} onClose={() => setLightboxPhoto(null)} />
     </>
   );
 };

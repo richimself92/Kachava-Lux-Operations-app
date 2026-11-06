@@ -2,7 +2,14 @@ import React, { useState, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useRequests } from '../context/RequestContext';
 import { translations } from '../i18n/translations';
-import { MaintenanceCategory, RequestPriority, CommonAreaSubLocation } from '../types';
+import { ALLOWED_PHOTO_TYPES, MAX_PHOTO_BYTES, MAX_PHOTOS_PER_KIND } from '../../shared/domain';
+import { useNow } from '../hooks/useNow';
+import { categoryOptions, locationLabel, prioritySla } from '../lib/labels';
+import { MAX_NOTES_LENGTH, richTextToPlain, sanitizeRichText } from '../lib/richText';
+import { formatCancunDate, formatCancunTime } from '../lib/time';
+import { PhotoValidationError } from '../services/requests';
+import { RichTextEditor } from './RichTextEditor';
+import type { MaintenanceCategory, RequestPriority, CommonAreaSubLocation } from '../types';
 import { 
   X, 
   Camera, 
@@ -19,7 +26,8 @@ import {
 interface NewRequestModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: (ticketId: string) => void;
+  /** Called after the request is saved; lists photo names that failed to upload. */
+  onSuccess: (failedPhotos: string[]) => void;
 }
 
 interface PreviewItem {
@@ -34,45 +42,29 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
   onSuccess,
 }) => {
   const { currentUser, language } = useAuth();
-  const { residences, createRequest, requests } = useRequests();
+  const { residences, createRequest } = useRequests();
   const t = translations[language];
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
   // Form states
-  const [villaNumber, setVillaNumber] = useState<string>('102');
+  const [locationCode, setLocationCode] = useState<string>('102');
   const [category, setCategory] = useState<MaintenanceCategory>('plumbing');
   const [commonAreaSubLocation, setCommonAreaSubLocation] = useState<CommonAreaSubLocation>('hall');
   const [priority, setPriority] = useState<RequestPriority>('normal');
-  const [locationDetail, setLocationDetail] = useState('');
   const [notes, setNotes] = useState('');
   const [selectedPhotos, setSelectedPhotos] = useState<PreviewItem[]>([]);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Live clock: the submission time is set by the server when the request is saved.
+  const now = useNow(1000, isOpen);
+
   if (!isOpen) return null;
 
-  const currentYear = new Date().getFullYear();
-  const predictedCount = requests.length + 1;
-  const previewTicketId = `KLM-${currentYear}-${String(predictedCount).padStart(4, '0')}`;
-
-  // 13 Categories in required order
-  const categories: { key: MaintenanceCategory; label: string }[] = [
-    { key: 'plumbing', label: t.catPlumbing },
-    { key: 'hvac', label: t.catHvac },
-    { key: 'electrical', label: t.catElectrical },
-    { key: 'pool', label: t.catPool },
-    { key: 'spa', label: t.catSpa },
-    { key: 'carpentry', label: t.catCarpentry },
-    { key: 'appliances', label: t.catAppliances },
-    { key: 'lighting', label: t.catLighting },
-    { key: 'av_tech', label: t.catAvTech },
-    { key: 'structural', label: t.catStructural },
-    { key: 'glass_windows', label: t.catGlassWindows },
-    { key: 'grounds', label: t.catGrounds },
-    { key: 'common_areas', label: t.catCommonAreas },
-  ];
+  // Categories from the shared domain (single source with the security rules).
+  const categories = categoryOptions(t);
 
   // Priority options with explicit response expectations
   const priorityOptions: {
@@ -86,7 +78,7 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
     {
       key: 'urgent',
       label: language === 'es' ? 'Urgente' : 'Urgent',
-      sla: language === 'es' ? 'Inmediata' : 'Immediate',
+      sla: prioritySla(t, 'urgent'),
       color: 'text-[#D93025]',
       activeBorder: 'border-[#D93025] bg-[#FCE8E6]',
       badgeBg: 'bg-[#D93025] text-white',
@@ -94,7 +86,7 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
     {
       key: 'high',
       label: language === 'es' ? 'Alta' : 'High',
-      sla: language === 'es' ? '2 horas' : '2 hours',
+      sla: prioritySla(t, 'high'),
       color: 'text-[#E37400]',
       activeBorder: 'border-[#E37400] bg-[#FEF7E0]',
       badgeBg: 'bg-[#E37400] text-white',
@@ -102,7 +94,7 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
     {
       key: 'normal',
       label: language === 'es' ? 'Normal' : 'Normal',
-      sla: language === 'es' ? '4 horas' : '4 hours',
+      sla: prioritySla(t, 'normal'),
       color: 'text-[#5F6368]',
       activeBorder: 'border-[#6D4627] bg-[#F4EFEA]',
       badgeBg: 'bg-[#6D4627] text-white',
@@ -110,7 +102,7 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
     {
       key: 'low',
       label: language === 'es' ? 'Baja' : 'Low',
-      sla: language === 'es' ? '24 horas' : '24 hours',
+      sla: prioritySla(t, 'low'),
       color: 'text-[#70757A]',
       activeBorder: 'border-[#70757A] bg-[#F1F3F4]',
       badgeBg: 'bg-[#70757A] text-white',
@@ -125,11 +117,11 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
     if (!files || files.length === 0) return;
     setFormError(null);
 
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
-    const maxSizeBytes = 5 * 1024 * 1024;
+    const allowedTypes: readonly string[] = ALLOWED_PHOTO_TYPES;
+    const maxSizeBytes = MAX_PHOTO_BYTES;
 
     const currentCount = selectedPhotos.length;
-    const remainingSlots = 5 - currentCount;
+    const remainingSlots = MAX_PHOTOS_PER_KIND - currentCount;
 
     if (remainingSlots <= 0) {
       setFormError(
@@ -173,7 +165,8 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
     e.preventDefault();
     setFormError(null);
 
-    if (!notes.trim()) {
+    const notesHtml = sanitizeRichText(notes);
+    if (!richTextToPlain(notesHtml)) {
       setFormError(
         language === 'es'
           ? 'Por favor describa la incidencia.'
@@ -182,11 +175,11 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
       return;
     }
 
-    if (!locationDetail.trim()) {
+    if (notesHtml.length > MAX_NOTES_LENGTH) {
       setFormError(
         language === 'es'
-          ? 'Por favor especifique la ubicación exacta.'
-          : 'Please specify the exact location detail.'
+          ? 'La descripción es demasiado larga o tiene demasiado formato. Acórtela e intente de nuevo.'
+          : 'The description is too long or has too much formatting. Please shorten it and try again.'
       );
       return;
     }
@@ -194,23 +187,35 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
     try {
       setIsSubmitting(true);
       const photoFiles = selectedPhotos.map((p) => p.file);
-      const generatedId = await createRequest(
+      const { failedPhotos } = await createRequest(
         {
-          villaNumber,
+          locationCode,
           category,
           commonAreaSubLocation: category === 'common_areas' ? commonAreaSubLocation : undefined,
           priority,
-          locationDetail: locationDetail.trim(),
-          notes: notes.trim(),
+          notes: notesHtml,
         },
         photoFiles
       );
 
       selectedPhotos.forEach((p) => URL.revokeObjectURL(p.previewUrl));
-      onSuccess(generatedId);
+      setNotes('');
+      setSelectedPhotos([]);
+      onSuccess(failedPhotos);
       onClose();
-    } catch (err: any) {
-      setFormError(err?.message || 'Error creating work order');
+    } catch (err) {
+      if (err instanceof PhotoValidationError) {
+        setFormError(
+          err.reason === 'too_many'
+            ? t.photoCountLimit.replace('{count}', String(selectedPhotos.length))
+            : err.reason === 'too_large'
+              ? t.photoSizeError.replace('{name}', err.fileName ?? '')
+              : t.photoFormatError.replace('{name}', err.fileName ?? ''),
+        );
+      } else {
+        console.error('Create request failed', err);
+        setFormError(language === 'es' ? 'No se pudo registrar la orden. Intente de nuevo.' : 'Could not save the work order. Please try again.');
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -254,8 +259,8 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
               <span className="text-[#5F6368] block text-[10px] uppercase font-semibold">
                 {t.ticketIdLabel}
               </span>
-              <span className="font-mono font-semibold text-[#202124]">
-                {previewTicketId}
+              <span className="font-medium italic text-[#5F6368]">
+                {t.ticketAssignedOnSubmit}
               </span>
             </div>
             <div>
@@ -271,9 +276,9 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
               <span className="text-[#5F6368] block text-[10px] uppercase font-semibold">
                 {t.submissionTimeLabel}
               </span>
-              <span className="font-medium text-[#202124] flex items-center gap-1">
+              <span className="font-medium text-[#202124] flex items-center gap-1 tabular-nums" aria-live="off">
                 <Calendar className="w-3 h-3 text-[#6D4627]" />
-                {language === 'es' ? 'Automática' : 'Automatic'}
+                {formatCancunDate(now, language)} · {formatCancunTime(now, language, true)}
               </span>
             </div>
           </div>
@@ -284,8 +289,8 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
               {t.villaSelectLabel} <span className="text-[#D93025]">*</span>
             </label>
             <select
-              value={villaNumber}
-              onChange={(e) => setVillaNumber(e.target.value)}
+              value={locationCode}
+              onChange={(e) => setLocationCode(e.target.value)}
               className="w-full bg-white border border-[#DADCE0] rounded px-3 py-2 text-sm text-[#202124] focus:outline-hidden focus:border-[#1A73E8]"
               required
             >
@@ -299,13 +304,7 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
               <optgroup label={t.locGroupOther}>
                 {otherLocationsList.map((loc) => (
                   <option key={loc.id} value={loc.code}>
-                    {loc.name === 'Office'
-                      ? t.locOffice
-                      : loc.name === 'Gym'
-                      ? t.locGym
-                      : loc.name === 'Storage'
-                      ? t.locStorage
-                      : loc.name}
+                    {locationLabel(t, loc.code, loc.name)}
                   </option>
                 ))}
               </optgroup>
@@ -426,33 +425,18 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
             </div>
           </div>
 
-          {/* Specific Location detail */}
-          <div>
-            <label className="block text-xs font-semibold text-[#202124] mb-1">
-              {t.locationDetailLabel} <span className="text-[#D93025]">*</span>
-            </label>
-            <input
-              type="text"
-              value={locationDetail}
-              onChange={(e) => setLocationDetail(e.target.value)}
-              placeholder={t.locationDetailPlaceholder}
-              className="w-full bg-white border border-[#DADCE0] rounded px-3 py-2 text-sm text-[#202124] focus:outline-hidden focus:border-[#1A73E8]"
-              required
-            />
-          </div>
-
           {/* Notes */}
           <div>
-            <label className="block text-xs font-semibold text-[#202124] mb-1">
+            <label htmlFor="new-request-notes" className="block text-xs font-semibold text-[#202124] mb-1">
               {t.notesLabel} <span className="text-[#D93025]">*</span>
             </label>
-            <textarea
-              rows={3}
+            <RichTextEditor
+              id="new-request-notes"
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              onChange={setNotes}
+              language={language}
               placeholder={t.notesPlaceholder}
-              className="w-full bg-white border border-[#DADCE0] rounded px-3 py-2 text-sm text-[#202124] focus:outline-hidden focus:border-[#1A73E8]"
-              required
+              stickyTopClass="-top-5"
             />
           </div>
 
@@ -468,7 +452,7 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
                 </p>
               </div>
               <span className="text-xs font-medium text-[#6D4627] bg-[#F4EFEA] px-2 py-0.5 rounded">
-                {selectedPhotos.length}/5
+                {selectedPhotos.length}/{MAX_PHOTOS_PER_KIND}
               </span>
             </div>
 
@@ -495,7 +479,7 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
               }}
             />
 
-            {selectedPhotos.length < 5 && (
+            {selectedPhotos.length < MAX_PHOTOS_PER_KIND && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <button
                   type="button"
