@@ -11,6 +11,7 @@ import {
   updateDoc,
   where,
   deleteDoc,
+  deleteField,
   writeBatch,
 } from 'firebase/firestore';
 import {
@@ -405,21 +406,46 @@ describe('lifecycle transitions', () => {
   });
 });
 
-describe('priority edits', () => {
-  const priorityBatch = (u: TestUser, id: string, priority: string, action = 'priority_changed') =>
-    updateBatch(dbFor(env, u), u, id, { priority }, { action, details: `high → ${priority}` }).batch.commit();
+describe('detail edits (location, category, priority, supervisor)', () => {
+  const editBatch = (u: TestUser, id: string, changes: Record<string, unknown>, action = 'details_edited') =>
+    updateBatch(dbFor(env, u), u, id, changes, { action, details: 'edit' }).batch.commit();
+  const priorityBatch = (u: TestUser, id: string, priority: string, action = 'details_edited') =>
+    editBatch(u, id, { priority }, action);
 
-  it('lets a supervisor or admin change the priority of an open request', async () => {
+  it('lets a supervisor or admin edit location, category, priority and supervisor of an open request', async () => {
     const id = await createRequestAs(env, USERS.staff);
     await assertSucceeds(priorityBatch(USERS.sup, id, 'normal'));
     await assertSucceeds(priorityBatch(USERS.admin, id, 'urgent'));
+    await assertSucceeds(
+      editBatch(USERS.sup, id, {
+        location: { code: 'gym', name: 'Gym', type: 'facility' },
+        category: 'common_areas',
+        commonAreaSubLocation: 'hall',
+        priority: 'low',
+        assignedTo: { email: USERS.sup2.email, name: USERS.sup2.displayName },
+      }),
+    );
+    await assertSucceeds(editBatch(USERS.admin, id, { category: 'lighting', commonAreaSubLocation: deleteField() }));
+    // The editor does not ask for a sub-location: moving into common_areas without one is allowed.
+    await assertSucceeds(editBatch(USERS.sup, id, { category: 'common_areas' }));
   });
 
-  it('rejects priority edits by staff, invalid values, mislabeled audits and completed requests', async () => {
+  it('rejects invalid locations, sub-locations and assignees', async () => {
+    const id = await createRequestAs(env, USERS.staff);
+    await assertFails(editBatch(USERS.sup, id, { location: { code: 'moon', name: 'Moon', type: 'facility' } }));
+    await assertFails(editBatch(USERS.sup, id, { category: 'common_areas', commonAreaSubLocation: 'garden' }));
+    await assertFails(editBatch(USERS.sup, id, { commonAreaSubLocation: 'hall' }));
+    await assertFails(editBatch(USERS.sup, id, { assignedTo: { email: USERS.staff.email, name: USERS.staff.displayName } }));
+    await assertFails(editBatch(USERS.sup, id, { assignedTo: { email: USERS.sup2.email, name: 'Someone else' } }));
+    await assertFails(editBatch(USERS.sup, id, { notes: 'Rewritten' }));
+  });
+
+  it('rejects edits by staff, invalid values, mislabeled audits and completed requests', async () => {
     const id = await createRequestAs(env, USERS.staff);
     await assertFails(priorityBatch(USERS.staff, id, 'low'));
     await assertFails(priorityBatch(USERS.sup, id, 'critical'));
     await assertFails(priorityBatch(USERS.sup, id, 'low', 'note_added'));
+    await assertFails(priorityBatch(USERS.sup, id, 'low', 'priority_changed'));
 
     await toReconocida(id);
     const db = dbFor(env, USERS.sup);

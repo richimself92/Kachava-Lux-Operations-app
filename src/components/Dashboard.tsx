@@ -12,9 +12,7 @@ import {
   PlayCircle,
   ShieldAlert,
   Timer,
-  Trash2,
 } from 'lucide-react';
-import { ConfirmDialog } from './ConfirmDialog';
 import { STATUSES, type RequestStatus } from '../../shared/domain';
 import { useAuth } from '../context/AuthContext';
 import { useRequests } from '../context/RequestContext';
@@ -40,7 +38,6 @@ interface DashboardProps {
   onSelectTab: (tab: string) => void;
   onOpenNewRequest: () => void;
   onSelectRequest: (req: MaintenanceRequest) => void;
-  onNotify?: (message: string) => void;
 }
 
 const STATE_CARD: Record<RequestStatus, { icon: React.ElementType; accent: string; label: keyof Dict }> = {
@@ -63,31 +60,9 @@ const STATUS_DOT: Record<RequestStatus, string> = {
 const dur = (ms: number | null) => (ms === null ? '—' : formatDurationShort(ms));
 const pct = (x: number | null) => (x === null ? '—' : `${Math.round(x * 100)}%`);
 
-export const Dashboard: React.FC<DashboardProps> = ({ onSelectTab, onSelectRequest, onNotify }) => {
-  const { language, role } = useAuth();
-  const { requests, residences, setFilterOptions, activeTicketCountsByVilla, loading, deleteRequest } = useRequests();
-  // Deletion is enforced in firestore.rules (admin only); this only hides the control.
-  const canDelete = role === 'admin';
-  const [pendingDelete, setPendingDelete] = useState<MaintenanceRequest | null>(null);
-  const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-
-  const confirmDelete = async () => {
-    if (!pendingDelete) return;
-    setDeleting(true);
-    setDeleteError(null);
-    try {
-      await deleteRequest(pendingDelete.id);
-      setPendingDelete(null);
-      onNotify?.(translations[language].deleteRequestDone);
-    } catch (err) {
-      console.error('Could not delete request', err);
-      setDeleteError(translations[language].deleteRequestFailed);
-    } finally {
-      setDeleting(false);
-    }
-  };
-
+export const Dashboard: React.FC<DashboardProps> = ({ onSelectTab, onSelectRequest }) => {
+  const { language } = useAuth();
+  const { requests, residences, setFilterOptions, activeTicketCountsByVilla, loading } = useRequests();
   // All-time status counts per location code, for the location tiles.
   const statusCountsByLocation = useMemo(() => {
     const out: Record<string, Record<RequestStatus, number>> = {};
@@ -411,23 +386,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSelectTab, onSelectReque
                 <th className="px-4 py-2.5">{t.filterStatus}</th>
                 <th className="px-4 py-2.5">{t.assignedSupervisorLabel}</th>
                 <th className="px-4 py-2.5 text-right">{t.dateTimeColumn}</th>
-                {canDelete && (
-                  <th className="w-10">
-                    <span className="sr-only">{t.deleteRequest}</span>
-                  </th>
-                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-[#DADCE0]">
               {requests.length === 0 && (
                 <tr>
-                  <td colSpan={canDelete ? 8 : 7} className="px-4 py-6 text-center text-[#5F6368]">
+                  <td colSpan={7} className="px-4 py-6 text-center text-[#5F6368]">
                     {loading ? t.loading : t.noDataYet}
                   </td>
                 </tr>
               )}
               {requests.slice(0, 6).map((req) => (
-                <tr key={req.id} onClick={() => onSelectRequest(req)} className="group hover:bg-[#F3F3F1] cursor-pointer">
+                <tr key={req.id} onClick={() => onSelectRequest(req)} className="hover:bg-[#F3F3F1] cursor-pointer">
                   <td className={`px-4 py-2.5 font-medium whitespace-nowrap ${req.ticketId ? 'text-[#202124]' : 'italic text-[#70757A]'}`}>
                     {ticketLabel(t, req)}
                   </td>
@@ -448,23 +418,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSelectTab, onSelectReque
                   >
                     {formatCancunShort(req.createdAt, language)}
                   </td>
-                  {canDelete && (
-                    <td className="w-10 pl-1 pr-3 py-1.5 text-right">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDeleteError(null);
-                          setPendingDelete(req);
-                        }}
-                        title={t.deleteRequest}
-                        aria-label={`${t.deleteRequest} ${ticketLabel(t, req)}`}
-                        className="p-1.5 rounded-md text-[#5F6368] hover:text-[#D93025] hover:bg-[#FCE8E6] opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity cursor-pointer"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </td>
-                  )}
                 </tr>
               ))}
             </tbody>
@@ -472,20 +425,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSelectTab, onSelectReque
         </div>
       </div>
 
-      {pendingDelete && (
-        <ConfirmDialog
-          title={t.deleteRequestTitle}
-          body={t.deleteRequestBody
-            .replace('{ticket}', ticketLabel(t, pendingDelete))
-            .replace('{location}', locationLabel(t, pendingDelete.location.code, pendingDelete.location.name))}
-          confirmLabel={t.deleteRequestConfirm}
-          cancelLabel={t.cancel}
-          busy={deleting}
-          error={deleteError}
-          onConfirm={() => void confirmDelete()}
-          onCancel={() => setPendingDelete(null)}
-        />
-      )}
     </div>
   );
 };

@@ -10,3 +10,7 @@ coverage/
 functions/lib/
 roster*.json
 *-debug.log
+.claude/
+.codegraph/
+Kachava Lux Maintenance.docx
+Kachava_Lux_DESIGN.md.txt

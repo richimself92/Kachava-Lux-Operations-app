@@ -157,8 +157,10 @@ service cloud.firestore {
     function isValidRequestCore(d) {
       return isValidLocation(d.location)
         && d.category in categories()
+        // Sub-location only for common_areas. Required on create (see below); optional after a
+        // supervisor edit moves a request into common_areas (the editor does not ask for it).
         && (d.category == 'common_areas'
-              ? ('commonAreaSubLocation' in d && d.commonAreaSubLocation in ['hall', 'parking'])
+              ? (!('commonAreaSubLocation' in d) || d.commonAreaSubLocation in ['hall', 'parking'])
               : !('commonAreaSubLocation' in d))
         && d.priority in priorities()
         && d.status in statuses()
@@ -268,14 +270,17 @@ service cloud.firestore {
         && auditPaired(reqId, ['reassigned', 'note_added', 'photo_added']);
     }
 
-    // --- Update action D: supervisor/admin changes the priority of an open request ---
-    // (the value itself is validated by isValidRequestCore)
-    function isPriorityEdit(reqId) {
+    // --- Update action D: supervisor/admin edits location, category, priority, assignee ---
+    // (values themselves are validated by isValidRequestCore)
+    function isDetailsEdit(reqId) {
+      let d = request.resource.data;
       return isSupervisor()
         && resource.data.status != 'completada'
-        && request.resource.data.priority != resource.data.priority
-        && changed().hasOnly(['priority', 'updatedAt', 'lastAuditId'])
-        && auditPaired(reqId, ['priority_changed']);
+        && d.status == resource.data.status
+        && changed().hasOnly(['location', 'category', 'commonAreaSubLocation', 'priority', 'assignedTo',
+                              'updatedAt', 'lastAuditId'])
+        && (!changed().hasAny(['assignedTo']) || isActiveSupervisorRef(d.assignedTo))
+        && auditPaired(reqId, ['details_edited']);
     }
 
     // Routes an update to the single action matching its paired audit entry, so only one
@@ -283,7 +288,7 @@ service cloud.firestore {
     // A missing/invalid lastAuditId makes getAfter() fail, which denies the write.
     function updateAllowed(reqId, action) {
       return (action == 'status_changed' && isStatusChange(reqId))
-        || (action == 'priority_changed' && isPriorityEdit(reqId))
+        || (action == 'details_edited' && isDetailsEdit(reqId))
         || (action == 'reassigned' && isSupervisorEdit(reqId))
         || (action in ['note_added', 'photo_added'] && (isStaffEdit(reqId) || isSupervisorEdit(reqId)));
     }
@@ -301,6 +306,7 @@ service cloud.firestore {
                                                   'createdAt', 'updatedAt', 'statusChangedAt',
                                                   'beforePhotos', 'afterPhotos', 'lastAuditId'])
         && isValidRequestCore(request.resource.data)
+        && (request.resource.data.category != 'common_areas' || 'commonAreaSubLocation' in request.resource.data)
         && request.resource.data.status == 'sin_revisar'
         && isMe(request.resource.data.submittedBy)
         && request.resource.data.createdAt == request.time
@@ -328,7 +334,7 @@ service cloud.firestore {
         allow create: if isApproved()
           && request.resource.data.keys().hasAll(['action', 'at', 'by', 'details'])
           && request.resource.data.keys().hasOnly(['action', 'fromStatus', 'toStatus', 'at', 'by', 'details'])
-          && request.resource.data.action in ['created', 'status_changed', 'reassigned', 'note_added', 'photo_added', 'priority_changed']
+          && request.resource.data.action in ['created', 'status_changed', 'reassigned', 'note_added', 'photo_added', 'details_edited']
           && request.resource.data.at == request.time
           && request.resource.data.by is map
           && request.resource.data.by.keys().hasOnly(['uid', 'email', 'name', 'role'])

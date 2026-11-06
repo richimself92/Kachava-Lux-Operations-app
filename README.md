@@ -35,7 +35,7 @@ Shared enums and domain rules (locations, categories, priorities, statuses, SLA 
 - Locations: villas 102, 104, 106, 108, 101, 103, 105, 107 and facilities Oficina Gerencia, Oficina Almacén,
   Cocina, Gimnasio, Almacén, Bodega.
 - Categories: Plumbing, HVAC, Electrical, Pool, Jacuzzi, Fauna nociva, Carpentry, Appliances, Lighting,
-  A/V & Tech, Structural, Glass & Windows, Grounds, Common Areas (with Hall/Parking). Spa was removed on purpose.
+  A/V & Tech, Structural, Glass & Windows, Grounds, Common Areas (with Hall/Parking, asked on the new-request form only). Spa was removed on purpose.
 - Priorities with response targets: Urgent 15 min, High 2 h, Normal 4 h, Low 24 h.
 - Description with a formatting toolbar (bold, italic, underline, strikethrough, color, lists, indent, links)
   that stays visible on long notes. Stored as sanitized HTML (DOMPurify), max 10,000 characters.
@@ -44,7 +44,7 @@ Shared enums and domain rules (locations, categories, priorities, statuses, SLA 
 - Every change is recorded in the request's audit history.
 
 ### Lifecycle
-`sin_revisar` → `pendiente` ⇄ `reconocida` → `completada` (pendiente requires a reason; completion requires a note; completed is final). Supervisors/admins can edit the priority of open requests (audited; the SLA is recomputed).
+`sin_revisar` → `pendiente` ⇄ `reconocida` → `completada` (pendiente requires a reason; completion requires a note; completed is final). Supervisors/admins edit location, category, priority and supervisor of open requests from the pencil in the Work Orders table (audited; the SLA is recomputed on priority change). Only admins can delete requests (trash icon in the same table).
 New requests are assigned to the default supervisor (Randel); otherwise the first supervisor who handles a
 request becomes its assignee. Supervisors can reassign. The detail view shows a live timer that turns red when
 the response target is overdue.

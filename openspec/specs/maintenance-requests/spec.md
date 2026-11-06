@@ -19,7 +19,7 @@ Maintenance requests SHALL be stored in the company-owned backend (`maintenanceR
 ### Requirement: Request contents
 Each request SHALL record:
 - location (id and type)
-- category, plus sublocation when the category is Common Areas
+- category, plus sublocation when the category is Common Areas (required on the new-request form; may be absent after a supervisor edit moves a request into Common Areas)
 - priority
 - description (formatted text, see "Formatted description")
 - submitter identity
@@ -78,10 +78,10 @@ The work orders list SHALL offer a "Date / Fecha" calendar filter, next to the p
 - **THEN** only requests submitted on November 6 (Cancun time) are listed
 
 ### Requirement: Request deletion
-Admins SHALL be able to permanently delete a request from the dashboard's recent work orders, after confirming in a dialog that names the ticket and location. Deleting a request SHALL also remove its audit history and photos, done by the backend. No other role SHALL be able to delete a request.
+Admins SHALL be able to permanently delete a request from the Work Orders table (trash icon shown on row hover), after confirming in a dialog that names the ticket and location. The dashboard's recent work orders SHALL NOT offer deletion. Deleting a request SHALL also remove its audit history and photos, done by the backend. No other role SHALL be able to delete a request.
 
 #### Scenario: Admin deletes a request
-- **WHEN** an admin hovers a recent work order, clicks the trash icon and confirms
+- **WHEN** an admin hovers a row in the Work Orders table, clicks the trash icon and confirms
 - **THEN** the request disappears from all views, and its audit history and photos are removed
 
 #### Scenario: Delete cancelled
@@ -89,7 +89,7 @@ Admins SHALL be able to permanently delete a request from the dashboard's recent
 - **THEN** nothing is deleted
 
 #### Scenario: Control hidden from other roles
-- **WHEN** a supervisor or staff user views the dashboard
+- **WHEN** a supervisor or staff user views the Work Orders table
 - **THEN** no delete control is shown, and a direct delete attempt is rejected by the backend
 
 ### Requirement: Categories
@@ -194,7 +194,7 @@ Every request SHALL keep an audit history. An entry SHALL be added for:
 - assignment or reassignment
 - note added
 - photo added
-- priority change
+- detail edit (location, category, priority, supervisor)
 
 Each entry records the server time, the acting user, their role, and details. Audit entries SHALL NOT be edited or deleted by any user. They are removed only by the backend, together with their request, when an admin deletes that request.
 

@@ -69,7 +69,6 @@ const MainLayout: React.FC = () => {
               onSelectTab={(tab) => setCurrentTab(tab)}
               onOpenNewRequest={() => setIsNewRequestOpen(true)}
               onSelectRequest={(req) => setSelectedRequestId(req.id)}
-              onNotify={showToast}
             />
           )}
 
@@ -77,6 +76,7 @@ const MainLayout: React.FC = () => {
             <RequestList
               onSelectRequest={(req) => setSelectedRequestId(req.id)}
               onOpenNewRequest={() => setIsNewRequestOpen(true)}
+              onNotify={showToast}
             />
           )}
 

@@ -8,6 +8,7 @@
 import {
   collection,
   deleteDoc,
+  deleteField,
   doc,
   onSnapshot,
   orderBy,
@@ -364,22 +365,60 @@ export async function reassign(db: Firestore, actor: Actor, req: MaintenanceRequ
   ).commit();
 }
 
-/** Supervisor/admin: change the priority of an open request (audit details: `old → new` codes). */
-export async function changePriority(
+export interface RequestDetailsEdit {
+  locationCode: string;
+  category: MaintenanceCategory;
+  priority: RequestPriority;
+  /** null = leave unassigned (only allowed if it already was). */
+  assignee: AssigneeRef | null;
+}
+
+/**
+ * Supervisor/admin: edit location, category, priority and assigned supervisor of an open
+ * request in one write. Audit details list each changed field as `field: old → new`
+ * (codes, or names for the assignee), separated by `; ` — translated by src/lib/auditText.ts.
+ * Changing the category away from common_areas also drops the sub-location (`area`).
+ * Returns false when nothing changed.
+ */
+export async function editRequestDetails(
   db: Firestore,
   actor: Actor,
   req: MaintenanceRequest,
-  to: RequestPriority,
-): Promise<void> {
+  edit: RequestDetailsEdit,
+): Promise<boolean> {
   if (req.status === 'completada') throw new Error('Completed requests cannot be changed');
-  if (to === req.priority) return;
-  await pairedBatch(
-    db,
-    actor,
-    req.id,
-    { priority: to },
-    { action: 'priority_changed', details: `${req.priority} → ${to}` },
-  ).commit();
+  const loc = findLocation(edit.locationCode);
+  if (!loc) throw new Error(`Unknown location ${edit.locationCode}`);
+  // The editor does not ask for the common-area sub-location: an existing one is kept while the
+  // category stays common_areas, and removed when the category changes.
+  const subLocation = edit.category === 'common_areas' && req.category === 'common_areas' ? req.commonAreaSubLocation : undefined;
+
+  const changes: Record<string, unknown> = {};
+  const parts: string[] = [];
+  if (loc.code !== req.location.code) {
+    changes.location = { code: loc.code, name: loc.name, type: loc.type };
+    parts.push(`location: ${req.location.code} → ${loc.code}`);
+  }
+  if (edit.category !== req.category) {
+    changes.category = edit.category;
+    parts.push(`category: ${req.category} → ${edit.category}`);
+  }
+  if ((subLocation ?? null) !== (req.commonAreaSubLocation ?? null)) {
+    changes.commonAreaSubLocation = subLocation ?? deleteField();
+    parts.push(`area: ${req.commonAreaSubLocation ?? '—'} → ${subLocation ?? '—'}`);
+  }
+  if (edit.priority !== req.priority) {
+    changes.priority = edit.priority;
+    parts.push(`priority: ${req.priority} → ${edit.priority}`);
+  }
+  if (edit.assignee && edit.assignee.email !== req.assignedTo?.email) {
+    changes.assignedTo = { email: edit.assignee.email, name: edit.assignee.name };
+    parts.push(`assignee: ${req.assignedTo?.name ?? '—'} → ${edit.assignee.name}`);
+  }
+  if (parts.length === 0) return false;
+
+  await pairedBatch(db, actor, req.id, changes, { action: 'details_edited', details: parts.join('; ') }).commit();
+  return true;
 }
 
 /** Adds a note to the request's audit history (staff: own unreviewed; supervisors: open requests). */

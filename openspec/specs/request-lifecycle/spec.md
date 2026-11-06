@@ -70,7 +70,7 @@ Clients SHALL NOT be able to set or alter these values.
 - **THEN** the backend rejects the write
 
 ### Requirement: Assignment
-A request SHALL have at most one assigned supervisor. When a supervisor moves an unassigned request into `pendiente` or `reconocida`, they SHALL become the assignee. Supervisors and admins SHALL be able to reassign a non-completed request to any active supervisor, and the reassignment is recorded in the audit history.
+A request SHALL have at most one assigned supervisor. When a supervisor moves an unassigned request into `pendiente` or `reconocida`, they SHALL become the assignee. Supervisors and admins SHALL be able to reassign a non-completed request to any active supervisor from the Work Orders table (see Detail edit), and the reassignment is recorded in the audit history.
 
 #### Scenario: Auto-assign on first handling
 - **WHEN** supervisor Randel moves an unassigned request to `reconocida`
@@ -113,16 +113,20 @@ Moving a request to `pendiente` SHALL require the reason it cannot be completed 
 - **WHEN** a client attempts to move a request to `pendiente` with an empty or blank reason
 - **THEN** the form asks for the reason, and the backend rejects the write
 
-### Requirement: Priority edit
-A supervisor or admin SHALL be able to change the priority of a request that is not `completada`, from the "Edit priority" action next to "Mark pending". The change SHALL be recorded in the audit history as `old → new`, and the backend SHALL recompute the request's response SLA from the new priority. Staff SHALL NOT change priority after submission.
+### Requirement: Detail edit from the Work Orders table
+A supervisor or admin SHALL be able to edit the location, category, priority and assigned supervisor of a request that is not `completada`, using dropdowns opened from the pencil icon shown on row hover in the Work Orders table. The editor SHALL NOT ask for the Common Areas sub-location (Hall/Parking): an existing one is kept while the category stays Common Areas and removed when the category changes, and a request moved into Common Areas has none. The changes SHALL be saved in one write with one audit entry listing each changed field as `old → new`. A new assignee SHALL be an active supervisor or admin, and an assigned request cannot be unassigned. When the priority changes, the backend SHALL recompute the request's response SLA. Staff SHALL NOT edit these fields after submission. The request detail view SHALL NOT offer reassignment or priority editing.
 
-#### Scenario: Supervisor raises priority
-- **WHEN** a supervisor changes an open request from low to high
-- **THEN** the request shows the new priority and the audit history shows "Priority changed: Low → High"
+#### Scenario: Supervisor edits an open request
+- **WHEN** a supervisor changes an open request from Gym / lighting / low / Randel to Kitchen / common areas / high / Carla
+- **THEN** the table shows the new values and the audit history shows one "Details edited" entry with each change, and no sub-location is asked for
 
-#### Scenario: Priority edit rejected
-- **WHEN** staff edit the priority, or anyone edits the priority of a completed request, or the audit entry is missing or mislabeled
+#### Scenario: Detail edit rejected
+- **WHEN** staff edit these fields, anyone edits a completed request, the assignee is not an active supervisor, the sub-location is invalid or set outside Common Areas, or the audit entry is missing or mislabeled
 - **THEN** the backend rejects the write
+
+#### Scenario: Pencil hidden on completed requests
+- **WHEN** a supervisor hovers a completed request in the Work Orders table
+- **THEN** no pencil icon is shown
 
 ### Requirement: Work time accumulates only while reconocida
 Work time SHALL be the sum of all periods the request spent in `reconocida`. The work timer SHALL start when the request enters `reconocida`, pause when it moves to `pendiente`, resume on re-entry to `reconocida`, and stop at `completada`.

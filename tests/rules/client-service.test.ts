@@ -11,6 +11,7 @@ import {
   attachPhotos,
   changeStatus,
   createRequestDoc,
+  editRequestDetails,
   reassign,
   subscribeRequests,
   toRequest,
@@ -120,6 +121,62 @@ describe('client request service vs rules', () => {
       'note_added',
       'status_changed',
     ]);
+  });
+
+  it('edits location, category, priority and supervisor in one audited write', async () => {
+    const staffDb = dbFor(env, USERS.staff);
+    const id = await createRequestDoc(staffDb, actor(USERS.staff), input);
+    const supDb = dbFor(env, USERS.sup);
+    const base = { locationCode: '104', category: 'jacuzzi' as const, priority: 'urgent' as const, assignee: null };
+
+    // No changes → no write.
+    expect(await editRequestDetails(supDb, actor(USERS.sup), await load(supDb, id), base)).toBe(false);
+
+    // Moving into common_areas does not ask for (or set) a sub-location.
+    await editRequestDetails(supDb, actor(USERS.sup), await load(supDb, id), {
+      locationCode: 'gym',
+      category: 'common_areas',
+      priority: 'low',
+      assignee: { email: USERS.sup2.email, name: USERS.sup2.displayName },
+    });
+    const req = await load(supDb, id);
+    expect(req.location).toEqual({ code: 'gym', name: 'Gym', type: 'facility' });
+    expect(req.category).toBe('common_areas');
+    expect(req.commonAreaSubLocation).toBeUndefined();
+    expect(req.priority).toBe('low');
+    expect(req.assignedTo?.email).toBe(USERS.sup2.email);
+
+    const audit = await getDocs(query(collection(supDb, 'maintenanceRequests', id, 'audit'), orderBy('at')));
+    const edits = audit.docs.map((d) => d.data()).filter((d) => d.action === 'details_edited');
+    expect(edits.map((d) => d.details)).toEqual([
+      'location: 104 → gym; category: jacuzzi → common_areas; priority: urgent → low; assignee: — → Carla Reina',
+    ]);
+
+    // A request created with a sub-location keeps it while it stays in common_areas, and loses it
+    // when the category changes.
+    const areaId = await createRequestDoc(staffDb, actor(USERS.staff), {
+      ...input,
+      category: 'common_areas',
+      commonAreaSubLocation: 'hall',
+    });
+    const areaBase = { locationCode: '104', category: 'common_areas' as const, priority: 'urgent' as const, assignee: null };
+    await editRequestDetails(supDb, actor(USERS.sup), await load(supDb, areaId), { ...areaBase, priority: 'high' });
+    expect((await load(supDb, areaId)).commonAreaSubLocation).toBe('hall');
+    await editRequestDetails(supDb, actor(USERS.sup), await load(supDb, areaId), { ...areaBase, priority: 'high', category: 'lighting' });
+    expect((await load(supDb, areaId)).commonAreaSubLocation).toBeUndefined();
+    const areaAudit = await getDocs(query(collection(supDb, 'maintenanceRequests', areaId, 'audit'), orderBy('at')));
+    expect(areaAudit.docs.map((d) => d.data()).filter((d) => d.action === 'details_edited').map((d) => d.details)).toEqual([
+      'priority: urgent → high',
+      'category: common_areas → lighting; area: hall → —',
+    ]);
+
+    // Staff cannot edit; nobody can edit a completed request.
+    await assertFails(editRequestDetails(staffDb, actor(USERS.staff), await load(staffDb, id), { ...base, priority: 'high' }));
+    await changeStatus(supDb, actor(USERS.sup), req, 'reconocida');
+    await changeStatus(supDb, actor(USERS.sup), await load(supDb, id), 'completada', { resolutionNotes: 'Done' });
+    await expect(
+      editRequestDetails(supDb, actor(USERS.sup), await load(supDb, id), { ...base, priority: 'high' }),
+    ).rejects.toThrow(/Completed/);
   });
 
   it('refuses invalid transitions and completion without notes; staff cannot change status', async () => {

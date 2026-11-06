@@ -21,9 +21,9 @@ follow-up UI/feature rounds done in the same session.
 - The first production release deployed rules, functions and hosting (done by the owner; sign-in with
   Microsoft, creating and editing a request were confirmed working).
 - **Pending:** the latest rules (admin-only request deletion, new facilities, optional legacy location detail,
-  10,000-char rich-text notes, required pending reason, supervisor priority edits) and functions (default supervisor, cleanup on delete, ticket backfill, SLA recompute on priority change) are **not
+  10,000-char rich-text notes, required pending reason, supervisor detail edits — location, category, priority, supervisor) and functions (default supervisor, cleanup on delete, ticket backfill, SLA recompute on priority change) are **not
   deployed yet**. Deploy order in §6 below.
-- Automated coverage: 55 rules tests (Firestore + Storage), 13 functions tests, 58 unit tests — all passing on
+- Automated coverage: 57 rules tests (Firestore + Storage + client service), 13 functions tests, 59 unit tests — all passing on
   2026-11-06.
 
 ## 3. Users and roles

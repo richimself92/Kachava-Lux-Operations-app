@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { AlertCircle, AlertTriangle, Camera, CalendarDays, ExternalLink, Loader2, RotateCcw, Search, User, X } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Camera, CalendarDays, ExternalLink, Loader2, Pencil, RotateCcw, Search, Trash2, User, X } from 'lucide-react';
 import { isResponseOverdue, isSupervisorRole } from '../../shared/domain';
 import { useAuth } from '../context/AuthContext';
 import { useRequests } from '../context/RequestContext';
@@ -20,21 +20,48 @@ import {
 } from '../lib/labels';
 import { richTextToPlain } from '../lib/richText';
 import { cancunDateKey, formatCancunDate, formatCancunDateTime, formatCancunShort, formatDateKey } from '../lib/time';
+import { ConfirmDialog } from './ConfirmDialog';
 import { DatePickerPopover } from './DatePickerPopover';
+import { EditRequestDialog } from './EditRequestDialog';
 import type { FilterOptions, MaintenanceRequest, TimeFilter } from '../types';
 
 interface RequestListProps {
   onSelectRequest: (req: MaintenanceRequest) => void;
   onOpenNewRequest: () => void;
+  onNotify?: (message: string) => void;
 }
 
-export const RequestList: React.FC<RequestListProps> = ({ onSelectRequest, onOpenNewRequest }) => {
+export const RequestList: React.FC<RequestListProps> = ({ onSelectRequest, onOpenNewRequest, onNotify }) => {
   const { language, role } = useAuth();
-  const { requests, filteredRequests, residences, filterOptions, setFilterOptions, resetFilters, assignableSupervisors, loading, loadError } =
+  const { requests, filteredRequests, residences, filterOptions, setFilterOptions, resetFilters, assignableSupervisors, loading, loadError, deleteRequest } =
     useRequests();
   const t = translations[language];
   const es = language === 'es';
   const isSupervisor = isSupervisorRole(role);
+  // Row actions (enforced in firestore.rules; these only hide the controls):
+  // edit = supervisors/admins on open requests, delete = admins only.
+  const canDelete = role === 'admin';
+  const canEdit = (req: MaintenanceRequest) => isSupervisor && req.status !== 'completada';
+  const [editing, setEditing] = useState<MaintenanceRequest | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<MaintenanceRequest | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteRequest(pendingDelete.id);
+      setPendingDelete(null);
+      onNotify?.(t.deleteRequestDone);
+    } catch (err) {
+      console.error('Could not delete request', err);
+      setDeleteError(t.deleteRequestFailed);
+    } finally {
+      setDeleting(false);
+    }
+  };
   // Overdue markers refresh every 30s.
   const now = useNow(30_000);
 
@@ -289,12 +316,17 @@ export const RequestList: React.FC<RequestListProps> = ({ onSelectRequest, onOpe
               <th className="px-3 py-2.5">{t.submittedByLabel}</th>
               <th className="px-3 py-2.5">{t.assignedSupervisorLabel}</th>
               <th className="px-3 py-2.5 text-right">{t.dateTimeColumn}</th>
+              {isSupervisor && (
+                <th className="w-20">
+                  <span className="sr-only">{es ? 'Acciones' : 'Actions'}</span>
+                </th>
+              )}
             </tr>
           </thead>
           <tbody className="divide-y divide-[#DADCE0]">
             {filteredRequests.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-4 py-10 text-center text-[#5F6368]">
+                <td colSpan={isSupervisor ? 10 : 9} className="px-4 py-10 text-center text-[#5F6368]">
                   <AlertCircle className="w-7 h-7 text-[#989166] mx-auto mb-1.5" />
                   <div className="font-medium text-sm">{emptyState}</div>
                 </td>
@@ -352,6 +384,41 @@ export const RequestList: React.FC<RequestListProps> = ({ onSelectRequest, onOpe
                     >
                       {formatCancunShort(req.createdAt, language)}
                     </td>
+                    {isSupervisor && (
+                      <td className="w-20 pl-1 pr-2 py-1.5 text-right whitespace-nowrap">
+                        <div className="inline-flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                          {canEdit(req) && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditing(req);
+                              }}
+                              title={t.editRequest}
+                              aria-label={`${t.editRequest} ${ticketLabel(t, req)}`}
+                              className="p-1.5 rounded-md text-[#5F6368] hover:text-[#6D4627] hover:bg-[#F4EFEA] cursor-pointer"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                          )}
+                          {canDelete && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteError(null);
+                                setPendingDelete(req);
+                              }}
+                              title={t.deleteRequest}
+                              aria-label={`${t.deleteRequest} ${ticketLabel(t, req)}`}
+                              className="p-1.5 rounded-md text-[#5F6368] hover:text-[#D93025] hover:bg-[#FCE8E6] cursor-pointer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 );
               })
@@ -415,6 +482,33 @@ export const RequestList: React.FC<RequestListProps> = ({ onSelectRequest, onOpe
           ))
         )}
       </div>
+
+      {editing && (
+        <EditRequestDialog
+          // Latest snapshot of the request, in case it changed while the dialog was open.
+          request={requests.find((r) => r.id === editing.id) ?? editing}
+          onSaved={(msg) => {
+            setEditing(null);
+            onNotify?.(msg);
+          }}
+          onCancel={() => setEditing(null)}
+        />
+      )}
+
+      {pendingDelete && (
+        <ConfirmDialog
+          title={t.deleteRequestTitle}
+          body={t.deleteRequestBody
+            .replace('{ticket}', ticketLabel(t, pendingDelete))
+            .replace('{location}', locationLabel(t, pendingDelete.location.code, pendingDelete.location.name))}
+          confirmLabel={t.deleteRequestConfirm}
+          cancelLabel={t.cancel}
+          busy={deleting}
+          error={deleteError}
+          onConfirm={() => void confirmDelete()}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
     </div>
   );
 };

@@ -58,7 +58,7 @@ export interface PhotoAttachment {
   kind: PhotoKind;
 }
 
-export type AuditAction = 'created' | 'status_changed' | 'reassigned' | 'note_added' | 'photo_added' | 'priority_changed';
+export type AuditAction = 'created' | 'status_changed' | 'reassigned' | 'note_added' | 'photo_added' | 'details_edited';
 
 export interface AuditLogEntry {
   id: string;

@@ -23,10 +23,24 @@ describe('audit text localization', () => {
     expect(auditDetailsText(es, 'es', { action: 'created', details: 'free text' })).toBe('free text');
   });
 
-  it('translates priority changes, photo entries and the default assignment', () => {
-    expect(auditDetailsText(es, 'es', { action: 'priority_changed', details: 'normal → high' })).toBe(
-      `${es.pBadgeNormal} → ${es.pBadgeHigh}`,
+  it('translates detail edits field by field', () => {
+    const details =
+      'location: gym → kitchen; category: lighting → common_areas; area: — → hall; priority: low → high; assignee: — → Carla Reina';
+    expect(auditDetailsText(es, 'es', { action: 'details_edited', details })).toBe(
+      [
+        `Ubicación: ${es.locGym} → ${es.locKitchen}`,
+        `Categoría: ${es.catLighting} → ${es.catCommonAreas}`,
+        `Área común: — → ${es.subLocHall}`,
+        `Prioridad: ${es.pBadgeLow} → ${es.pBadgeHigh}`,
+        'Supervisor: — → Carla Reina',
+      ].join(' · '),
     );
+    expect(auditDetailsText(en, 'en', { action: 'details_edited', details: 'priority: low → urgent' })).toBe(
+      `Priority: ${en.pBadgeLow} → ${en.pBadgeUrgent}`,
+    );
+  });
+
+  it('translates photo entries and the default assignment', () => {
     expect(auditDetailsText(es, 'es', { action: 'photo_added', details: '2 before photo(s): a.jpg, b.png' })).toBe(
       '2 foto(s) iniciales: a.jpg, b.png',
     );
@@ -44,7 +58,7 @@ describe('audit text localization', () => {
 
   it('translates action and role labels', () => {
     expect(auditActionLabel('created', 'es')).toBe('Creada');
-    expect(auditActionLabel('priority_changed', 'es')).toBe('Cambio de prioridad');
+    expect(auditActionLabel('details_edited', 'es')).toBe('Datos editados');
     expect(auditRoleLabel('admin', 'es')).toBe('Administrador');
     expect(auditRoleLabel('system', 'es')).toBe('Sistema');
   });

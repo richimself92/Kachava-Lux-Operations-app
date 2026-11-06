@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { isSupervisorRole, type RequestPriority } from '../../shared/domain';
+import { isSupervisorRole } from '../../shared/domain';
 import { INITIAL_LOCATIONS } from '../data/initialData';
 import { richTextToPlain } from '../lib/richText';
 import { cancunDateKey, isInPeriod } from '../lib/time';
@@ -10,8 +10,8 @@ import {
   attachPhotos,
   changeStatus as changeStatusOp,
   createRequestDoc,
-  reassign as reassignOp,
-  changePriority as changePriorityOp,
+  editRequestDetails as editRequestDetailsOp,
+  type RequestDetailsEdit,
   subscribeRequests,
   uploadPhotos,
   validatePhotos,
@@ -21,7 +21,6 @@ import {
 import { subscribeUsers } from '../services/users';
 import type {
   AppUser,
-  AssigneeRef,
   FilterOptions,
   MaintenanceRequest,
   PhotoKind,
@@ -47,8 +46,8 @@ interface RequestContextType {
     to: RequestStatus,
     opts?: { note?: string; resolutionNotes?: string; afterPhotoFiles?: File[] },
   ) => Promise<{ failedPhotos: string[] }>;
-  reassign: (req: MaintenanceRequest, to: AssigneeRef) => Promise<void>;
-  changePriority: (req: MaintenanceRequest, to: RequestPriority) => Promise<void>;
+  /** Supervisor/admin: edit location, category, priority and assignee. Resolves false if nothing changed. */
+  editDetails: (req: MaintenanceRequest, edit: RequestDetailsEdit) => Promise<boolean>;
   addNote: (reqId: string, note: string) => Promise<void>;
   deleteRequest: (reqId: string) => Promise<void>;
   addPhotos: (req: MaintenanceRequest, kind: PhotoKind, files: File[]) => Promise<{ failedPhotos: string[] }>;
@@ -167,11 +166,9 @@ export const RequestProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return { failedPhotos };
     });
 
-  const reassign: RequestContextType['reassign'] = (req, to) =>
-    withSubmitting(() => reassignOp(db(), actor(), req, to));
 
-  const changePriority: RequestContextType['changePriority'] = (req, to) =>
-    withSubmitting(() => changePriorityOp(db(), actor(), req, to));
+  const editDetails: RequestContextType['editDetails'] = (req, edit) =>
+    withSubmitting(() => editRequestDetailsOp(db(), actor(), req, edit));
 
   const addNote: RequestContextType['addNote'] = (reqId, note) =>
     withSubmitting(() => addNoteOp(db(), actor(), reqId, note));
@@ -248,8 +245,7 @@ export const RequestProvider: React.FC<{ children: React.ReactNode }> = ({ child
         resetFilters,
         createRequest,
         changeStatus,
-        reassign,
-        changePriority,
+        editDetails,
         addNote,
         deleteRequest,
         addPhotos,

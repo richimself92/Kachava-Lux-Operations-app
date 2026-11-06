@@ -3,7 +3,6 @@ import {
   AlertCircle,
   Camera,
   CheckCircle2,
-  Flag,
   History,
   Lock,
   MessageSquarePlus,
@@ -21,7 +20,6 @@ import {
   MAX_PHOTO_BYTES,
   MAX_PHOTOS_PER_KIND,
   TRANSITIONS,
-  type RequestPriority,
 } from '../../shared/domain';
 import { useAuth } from '../context/AuthContext';
 import { useRequests } from '../context/RequestContext';
@@ -30,7 +28,6 @@ import {
   locationLabel,
   PRIORITY_STYLE,
   priorityBadge,
-  priorityOptions,
   prioritySla,
   requestCategoryLabel,
   STATUS_STYLE,
@@ -75,8 +72,7 @@ const PhotoPicker: React.FC<{
   t: Dict;
   onError: (msg: string | null) => void;
   /** Rendered at the right end of the camera/files row (e.g. a submit button). */
-  trailing?: React.ReactNode;
-}> = ({ files, setFiles, maxFiles, language, t, onError, trailing }) => {
+}> = ({ files, setFiles, maxFiles, language, t, onError }) => {
   const fileRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const es = language === 'es';
@@ -111,7 +107,7 @@ const PhotoPicker: React.FC<{
     <div className="space-y-2">
       <input ref={fileRef} type="file" multiple accept={ALLOWED_PHOTO_TYPES.join(',')} className="hidden" onChange={reset} />
       <input ref={cameraRef} type="file" accept={ALLOWED_PHOTO_TYPES.join(',')} capture="environment" className="hidden" onChange={reset} />
-      {(files.length < maxFiles || trailing) && (
+      {files.length < maxFiles && (
         <div className="flex flex-wrap items-center gap-2">
           {files.length < maxFiles && (
             <>
@@ -136,7 +132,6 @@ const PhotoPicker: React.FC<{
               </span>
             </>
           )}
-          {trailing && <div className="ml-auto">{trailing}</div>}
         </div>
       )}
       {files.length > 0 && (
@@ -177,7 +172,7 @@ const PhotoGrid: React.FC<{ photos: PhotoAttachment[]; onOpen: (p: PhotoAttachme
 
 export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request, onClose }) => {
   const { currentUser, role, language } = useAuth();
-  const { changeStatus, changePriority, reassign, addNote, addPhotos, assignableSupervisors, isSubmitting } = useRequests();
+  const { changeStatus, addNote, addPhotos, isSubmitting } = useRequests();
   const t = translations[language];
   const es = language === 'es';
 
@@ -189,13 +184,10 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
 
   const [pendingReason, setPendingReason] = useState('');
   const [showPendingForm, setShowPendingForm] = useState(false);
-  const [showPriorityForm, setShowPriorityForm] = useState(false);
-  const [newPriority, setNewPriority] = useState<RequestPriority>(request?.priority ?? 'normal');
   const [completionNotes, setCompletionNotes] = useState('');
   const [afterFiles, setAfterFiles] = useState<PendingFile[]>([]);
   const [beforeFiles, setBeforeFiles] = useState<PendingFile[]>([]);
   const [noteText, setNoteText] = useState('');
-  const [reassignTo, setReassignTo] = useState('');
 
   const reqId = request?.id;
   useEffect(() => {
@@ -225,7 +217,6 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
   const allowed = isSupervisor ? TRANSITIONS[request.status] : [];
   const canAddNote = isSupervisor ? isOpen : isSubmitter && request.status === 'sin_revisar';
   const canAddBeforePhotos = isSubmitter && request.status === 'sin_revisar' && request.beforePhotos.length < MAX_PHOTOS_PER_KIND;
-  const reassignOptions = assignableSupervisors.filter((s) => s.email !== request.assignedTo?.email);
 
   const run = async (fn: () => Promise<string | null>) => {
     setActionError(null);
@@ -252,16 +243,6 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
       setShowPendingForm(false);
       return t.statusChangeSuccess;
     });
-
-  const handleSavePriority = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newPriority === request.priority) return;
-    return run(async () => {
-      await changePriority(request, newPriority);
-      setShowPriorityForm(false);
-      return t.priorityChangeSuccess;
-    });
-  };
 
   const handleMarkPending = (e: React.FormEvent) => {
     e.preventDefault();
@@ -303,15 +284,6 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
       await addNote(request.id, noteText);
       setNoteText('');
       return t.noteAddedSuccess;
-    });
-
-  const handleReassign = () =>
-    run(async () => {
-      const target = assignableSupervisors.find((s) => s.email === reassignTo);
-      if (!target) return null;
-      await reassign(request, { email: target.email, name: target.displayName });
-      setReassignTo('');
-      return t.reassignSuccess;
     });
 
   const progression: { key: MaintenanceRequest['status']; reached: boolean }[] = [
@@ -566,154 +538,113 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                   </div>
                 )}
 
-                {/* Supervisor lifecycle controls (staff see none) */}
+                {/* Supervisor lifecycle controls (staff see none). Location, category, priority and
+                    supervisor are edited from the pencil in the Work Orders table. */}
                 {isSupervisor && isOpen && (
                   <div className="border border-[#6D4627]/30 rounded-lg p-3.5 bg-[#F4EFEA]/30 space-y-3 print:hidden">
-                    <div className="flex items-center gap-1.5 pb-1.5 border-b border-[#E8DEC9]">
-                      <ShieldCheck className="w-4 h-4 text-[#6D4627]" />
-                      <h3 className="font-semibold text-xs sm:text-sm text-[#202124]">{t.supervisorWorkflowTitle}</h3>
-                    </div>
-
-                    {(allowed.includes('reconocida') || allowed.includes('pendiente')) && (
-                      <div className="space-y-2">
-                        <div className="flex flex-wrap gap-2">
-                          {allowed.includes('reconocida') && (
-                            <button
-                              type="button"
-                              disabled={isSubmitting}
-                              onClick={() => handleTransition('reconocida')}
-                              className="px-3.5 py-1.5 bg-[#1A73E8] hover:bg-[#1557B0] text-white rounded text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                            >
-                              <PlayCircle className="w-3.5 h-3.5" />
-                              {request.status === 'pendiente' ? t.actionResumeWork : t.actionStartWork}
-                            </button>
-                          )}
-                          {allowed.includes('pendiente') && (
-                            <button
-                              type="button"
-                              disabled={isSubmitting}
-                              onClick={() => {
-                                setActionError(null);
-                                setShowPriorityForm(false);
-                                setShowPendingForm((v) => !v);
-                              }}
-                              aria-expanded={showPendingForm}
-                              className={`px-3.5 py-1.5 border border-[#8430CE] text-[#8430CE] rounded text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50 ${
-                                showPendingForm ? 'bg-[#F3E8FD]' : 'bg-white hover:bg-[#F3E8FD]'
-                              }`}
-                            >
-                              <PauseCircle className="w-3.5 h-3.5" />
-                              {t.actionMarkPending}
-                            </button>
-                          )}
+                    <div
+                      className={`flex flex-wrap items-center justify-between gap-2 ${
+                        (allowed.includes('pendiente') && showPendingForm) || allowed.includes('completada')
+                          ? 'pb-2 border-b border-[#E8DEC9]'
+                          : ''
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <ShieldCheck className="w-4 h-4 text-[#6D4627]" />
+                        <h3 className="font-semibold text-xs sm:text-sm text-[#202124]">{t.supervisorWorkflowTitle}</h3>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-end gap-2 ml-auto">
+                        {allowed.includes('reconocida') && (
+                          <button
+                            type="button"
+                            disabled={isSubmitting}
+                            onClick={() => handleTransition('reconocida')}
+                            className="px-3.5 py-1.5 bg-[#1A73E8] hover:bg-[#1557B0] text-white rounded text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                          >
+                            <PlayCircle className="w-3.5 h-3.5" />
+                            {request.status === 'pendiente' ? t.actionResumeWork : t.actionStartWork}
+                          </button>
+                        )}
+                        {allowed.includes('pendiente') && (
                           <button
                             type="button"
                             disabled={isSubmitting}
                             onClick={() => {
                               setActionError(null);
-                              setShowPendingForm(false);
-                              setNewPriority(request.priority);
-                              setShowPriorityForm((v) => !v);
+                              setShowPendingForm((v) => !v);
                             }}
-                            aria-expanded={showPriorityForm}
-                            className={`px-3.5 py-1.5 border border-[#DADCE0] text-[#202124] rounded text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50 ${
-                              showPriorityForm ? 'bg-[#F3F3F1]' : 'bg-white hover:bg-[#F3F3F1]'
+                            aria-expanded={showPendingForm}
+                            className={`px-3.5 py-1.5 border border-[#8430CE] text-[#8430CE] rounded text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50 ${
+                              showPendingForm ? 'bg-[#F3E8FD]' : 'bg-white hover:bg-[#F3E8FD]'
                             }`}
                           >
-                            <Flag className="w-3.5 h-3.5 text-[#6D4627]" />
-                            {t.actionEditPriority}
+                            <PauseCircle className="w-3.5 h-3.5" />
+                            {t.actionMarkPending}
                           </button>
-                        </div>
-
-                        {showPriorityForm && (
-                          <form onSubmit={handleSavePriority} className="bg-white p-3 rounded border border-[#DADCE0] space-y-2.5">
-                            <div>
-                              <label htmlFor="new-priority" className="block text-xs font-semibold text-[#202124] mb-1">
-                                {t.newPriorityLabel}
-                              </label>
-                              <select
-                                id="new-priority"
-                                value={newPriority}
-                                onChange={(e) => setNewPriority(e.target.value as RequestPriority)}
-                                className="w-full sm:w-auto bg-white border border-[#DADCE0] rounded px-2 py-1.5 text-xs"
-                              >
-                                {priorityOptions(t).map((p) => (
-                                  <option key={p.key} value={p.key}>
-                                    {p.label}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              <button
-                                type="submit"
-                                disabled={isSubmitting || newPriority === request.priority}
-                                className="px-3.5 py-1.5 bg-[#6D4627] hover:bg-[#55361D] text-white rounded text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                              >
-                                <Flag className="w-3.5 h-3.5" />
-                                {t.savePriority}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setShowPriorityForm(false)}
-                                className="px-3.5 py-1.5 bg-white hover:bg-[#F3F3F1] border border-[#DADCE0] rounded text-xs font-medium cursor-pointer"
-                              >
-                                {t.cancel}
-                              </button>
-                            </div>
-                          </form>
                         )}
-
-                        {allowed.includes('pendiente') && showPendingForm && (
-                          <form onSubmit={handleMarkPending} className="bg-white p-3 rounded border border-[#8430CE]/40 space-y-2.5">
-                            <div>
-                              <label htmlFor="pending-reason" className="block text-xs font-semibold text-[#202124] mb-1">
-                                {t.pendingReasonLabel} <span className="text-[#D93025]">*</span>
-                              </label>
-                              <textarea
-                                id="pending-reason"
-                                rows={2}
-                                autoFocus
-                                value={pendingReason}
-                                onChange={(e) => setPendingReason(e.target.value)}
-                                placeholder={t.pendingReasonPlaceholder}
-                                maxLength={2000}
-                                required
-                                className="w-full bg-white border border-[#DADCE0] rounded px-3 py-1.5 text-xs focus:outline-hidden focus:border-[#8430CE]"
-                              />
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              <button
-                                type="submit"
-                                disabled={isSubmitting || !pendingReason.trim()}
-                                className="px-3.5 py-1.5 bg-[#8430CE] hover:bg-[#6A26A6] text-white rounded text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                              >
-                                <PauseCircle className="w-3.5 h-3.5" />
-                                {t.confirmPending}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setShowPendingForm(false);
-                                  setPendingReason('');
-                                }}
-                                className="px-3.5 py-1.5 bg-white hover:bg-[#F3F3F1] border border-[#DADCE0] rounded text-xs font-medium cursor-pointer"
-                              >
-                                {t.cancel}
-                              </button>
-                            </div>
-                          </form>
+                        {allowed.includes('completada') && (
+                          <button
+                            type="submit"
+                            form="completion-form"
+                            disabled={isSubmitting}
+                            className="px-3.5 py-1.5 bg-[#137333] hover:bg-[#0E5B28] text-white rounded text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-xs"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            {t.confirmComplete}
+                          </button>
                         )}
                       </div>
+                    </div>
+
+                    {allowed.includes('pendiente') && showPendingForm && (
+                      <form onSubmit={handleMarkPending} className="bg-white p-3 rounded border border-[#8430CE]/40 space-y-2.5">
+                        <div>
+                          <label htmlFor="pending-reason" className="block text-xs font-semibold text-[#202124] mb-1">
+                            {t.pendingReasonLabel} <span className="text-[#D93025]">*</span>
+                          </label>
+                          <textarea
+                            id="pending-reason"
+                            rows={2}
+                            autoFocus
+                            value={pendingReason}
+                            onChange={(e) => setPendingReason(e.target.value)}
+                            placeholder={t.pendingReasonPlaceholder}
+                            maxLength={2000}
+                            required
+                            className="w-full bg-white border border-[#DADCE0] rounded px-3 py-1.5 text-xs focus:outline-hidden focus:border-[#8430CE]"
+                          />
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="submit"
+                            disabled={isSubmitting || !pendingReason.trim()}
+                            className="px-3.5 py-1.5 bg-[#8430CE] hover:bg-[#6A26A6] text-white rounded text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                          >
+                            <PauseCircle className="w-3.5 h-3.5" />
+                            {t.confirmPending}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowPendingForm(false);
+                              setPendingReason('');
+                            }}
+                            className="px-3.5 py-1.5 bg-white hover:bg-[#F3F3F1] border border-[#DADCE0] rounded text-xs font-medium cursor-pointer"
+                          >
+                            {t.cancel}
+                          </button>
+                        </div>
+                      </form>
                     )}
 
                     {allowed.includes('completada') && (
-                      <form onSubmit={handleComplete} className="bg-white p-3 rounded border border-[#DADCE0] space-y-2.5">
+                      <form id="completion-form" onSubmit={handleComplete} className="bg-white p-3 rounded border border-[#DADCE0] space-y-2.5">
                         <div>
-                          <label className="block text-xs font-semibold text-[#202124] mb-1">
+                          <label htmlFor="completion-notes" className="block text-xs font-semibold text-[#202124] mb-1">
                             {t.supervisorNotesLabel} <span className="text-[#D93025]">*</span>
                           </label>
                           <textarea
+                            id="completion-notes"
                             rows={2}
                             value={completionNotes}
                             onChange={(e) => setCompletionNotes(e.target.value)}
@@ -732,44 +663,10 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                             language={language}
                             t={t}
                             onError={setActionError}
-                            trailing={
-                              <button
-                                type="submit"
-                                disabled={isSubmitting}
-                                className="px-4 py-2 bg-[#137333] hover:bg-[#0E5B28] text-white rounded text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-xs"
-                              >
-                                <CheckCircle2 className="w-3.5 h-3.5" />
-                                {t.confirmComplete}
-                              </button>
-                            }
                           />
                         </div>
                       </form>
                     )}
-
-                    <div className="pt-2 border-t border-[#E8DEC9] flex flex-wrap items-center gap-2 text-xs">
-                      <span className="text-[#5F6368] font-medium">{t.reassignSupervisor}:</span>
-                      <select
-                        value={reassignTo}
-                        onChange={(e) => setReassignTo(e.target.value)}
-                        className="bg-white border border-[#DADCE0] rounded px-2 py-1 text-xs"
-                      >
-                        <option value="">{t.selectSupervisorPlaceholder}</option>
-                        {reassignOptions.map((s) => (
-                          <option key={s.email} value={s.email}>
-                            {s.displayName} ({s.title})
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        type="button"
-                        onClick={handleReassign}
-                        disabled={isSubmitting || !reassignTo}
-                        className="px-2 py-1 bg-white hover:bg-gray-100 border border-[#DADCE0] rounded text-xs font-medium disabled:opacity-40 cursor-pointer"
-                      >
-                        {t.update}
-                      </button>
-                    </div>
                   </div>
                 )}
               </>
