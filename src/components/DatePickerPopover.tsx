@@ -75,7 +75,7 @@ export const DatePickerPopover: React.FC<DatePickerPopoverProps> = ({
       <div
         role="dialog"
         aria-label={monthTitle}
-        className="absolute left-0 top-full mt-1.5 z-40 w-72 bg-white border border-[#DADCE0] rounded-lg shadow-xl p-3"
+        className="absolute left-0 top-full mt-1.5 z-40 w-[min(18rem,calc(100vw-2rem))] bg-surface border border-line rounded-sm p-3"
         onKeyDown={(e) => e.key === 'Escape' && onClose()}
       >
         <div className="flex items-center justify-between mb-2">
@@ -83,17 +83,17 @@ export const DatePickerPopover: React.FC<DatePickerPopoverProps> = ({
             type="button"
             onClick={() => shift(-1)}
             aria-label={L.prev}
-            className="p-1 rounded hover:bg-[#F3F3F1] text-[#5F6368] cursor-pointer"
+            className="inline-flex items-center justify-center w-9 h-9 rounded-sm hover:bg-wash text-muted cursor-pointer"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
-          <span className="inline-block text-sm font-semibold text-[#202124] first-letter:uppercase">{monthTitle}</span>
+          <span className="inline-block text-sm text-ink first-letter:uppercase">{monthTitle}</span>
           <button
             type="button"
             onClick={() => shift(1)}
             disabled={isCurrentMonth}
             aria-label={L.next}
-            className="p-1 rounded hover:bg-[#F3F3F1] text-[#5F6368] cursor-pointer disabled:opacity-30 disabled:cursor-default"
+            className="inline-flex items-center justify-center w-9 h-9 rounded-sm hover:bg-wash text-muted cursor-pointer disabled:opacity-30 disabled:cursor-default"
           >
             <ChevronRight className="w-4 h-4" />
           </button>
@@ -101,7 +101,7 @@ export const DatePickerPopover: React.FC<DatePickerPopoverProps> = ({
 
         <div className="grid grid-cols-7 gap-0.5 text-center">
           {weekdays.map((w, i) => (
-            <span key={i} className="text-[10px] font-semibold text-[#70757A] uppercase py-1">
+            <span key={i} className="text-[10px] font-semibold text-muted uppercase py-1">
               {w}
             </span>
           ))}
@@ -119,19 +119,19 @@ export const DatePickerPopover: React.FC<DatePickerPopoverProps> = ({
                 disabled={future}
                 onClick={() => onSelect(key)}
                 aria-pressed={selected}
-                className={`relative h-8 rounded-md text-xs tabular-nums transition-colors cursor-pointer disabled:cursor-default disabled:text-[#C4C7C5] ${
+                className={`relative h-9 rounded-sm text-sm tabular-nums transition-colors cursor-pointer disabled:cursor-default disabled:text-faint ${
                   selected
-                    ? 'bg-[#6D4627] text-white font-semibold'
+                    ? 'bg-brand text-surface font-semibold'
                     : isToday
-                      ? 'border border-[#6D4627] text-[#6D4627] font-semibold hover:bg-[#F4EFEA]'
-                      : 'text-[#202124] hover:bg-[#F3F3F1]'
+                      ? 'border border-brand text-brand font-semibold hover:bg-brand-wash'
+                      : 'text-ink hover:bg-wash'
                 }`}
               >
                 {d}
                 {marked && !future && (
                   <span
                     className={`absolute left-1/2 -translate-x-1/2 bottom-0.5 w-1 h-1 rounded-full ${
-                      selected ? 'bg-white' : 'bg-[#E37400]'
+                      selected ? 'bg-surface' : 'bg-pending'
                     }`}
                   />
                 )}
@@ -140,15 +140,15 @@ export const DatePickerPopover: React.FC<DatePickerPopoverProps> = ({
           })}
         </div>
 
-        <div className="mt-2 pt-2 border-t border-[#DADCE0] flex items-center justify-between">
-          <span className="text-[10px] text-[#70757A] flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#E37400]" />
+        <div className="mt-2 pt-2 border-t border-line flex items-center justify-between">
+          <span className="text-[10px] text-muted flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-pending" />
             {L.hint}
           </span>
           <button
             type="button"
             onClick={() => onSelect(todayKey)}
-            className="text-xs font-medium text-[#6D4627] hover:underline cursor-pointer"
+            className="text-xs font-medium text-brand hover:underline cursor-pointer"
           >
             {L.today}
           </button>

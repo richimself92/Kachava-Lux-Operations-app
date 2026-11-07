@@ -71,24 +71,24 @@ export const EditRequestDialog: React.FC<EditRequestDialogProps> = ({ request, o
   };
 
   const fieldClass =
-    'w-full bg-white border border-[#DADCE0] rounded-md px-2 py-1.5 text-sm text-[#202124] focus:outline-hidden focus:border-[#1A73E8]';
-  const labelClass = 'block text-xs font-semibold text-[#5F6368] mb-1';
+    'w-full min-h-11 bg-surface border border-line rounded-sm px-3 text-sm text-ink focus:outline-hidden focus:border-ink cursor-pointer';
+  const labelClass = 'kl-label block mb-1.5';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={(e) => e.stopPropagation()}>
-      <div className="absolute inset-0 bg-black/40" onClick={() => !isSubmitting && onCancel()} />
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 animate-fade-in" onClick={(e) => e.stopPropagation()}>
+      <div className="absolute inset-0 bg-ink/40" onClick={() => !isSubmitting && onCancel()} />
       <form
         role="dialog"
         aria-modal="true"
         aria-labelledby="edit-request-title"
         onSubmit={(e) => void handleSubmit(e)}
-        className="relative w-full max-w-md bg-white rounded-lg shadow-xl border border-[#DADCE0] p-5 space-y-3.5"
+        className="relative w-full sm:max-w-md bg-surface border-t sm:border border-line rounded-none sm:rounded-sm p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:pb-5 space-y-4 max-h-[90dvh] overflow-y-auto"
       >
         <div className="flex items-center gap-2">
-          <div className="p-2 rounded-full bg-[#F4EFEA] text-[#6D4627] shrink-0">
+          <div className="text-brand shrink-0">
             <Pencil className="w-4 h-4" />
           </div>
-          <h2 id="edit-request-title" className="text-base font-semibold text-[#202124]">
+          <h2 id="edit-request-title" className="text-lg text-ink">
             {t.editRequestTitle.replace('{ticket}', ticketLabel(t, request))}
           </h2>
         </div>
@@ -167,21 +167,21 @@ export const EditRequestDialog: React.FC<EditRequestDialogProps> = ({ request, o
           </select>
         </div>
 
-        {error && <p className="text-sm text-[#D93025]">{error}</p>}
+        {error && <p className="text-sm text-danger">{error}</p>}
 
         <div className="pt-1 flex justify-end gap-2">
           <button
             type="button"
             onClick={onCancel}
             disabled={isSubmitting}
-            className="px-3 py-1.5 text-sm font-medium rounded-md border border-[#DADCE0] text-[#202124] hover:bg-[#F3F3F1] disabled:opacity-50 cursor-pointer"
+            className="flex-1 sm:flex-none min-h-11 px-4 text-sm rounded-sm border border-line-strong text-ink hover:bg-wash disabled:opacity-50 cursor-pointer"
           >
             {t.cancel}
           </button>
           <button
             type="submit"
             disabled={!canSave}
-            className="px-3 py-1.5 text-sm font-semibold rounded-md bg-[#6D4627] hover:bg-[#55361D] text-white disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+            className="flex-1 sm:flex-none min-h-11 px-4 text-sm font-medium rounded-sm bg-brand hover:bg-brand-deep text-surface disabled:opacity-50 cursor-pointer inline-flex items-center justify-center gap-1.5"
           >
             {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
             {t.saveChanges}

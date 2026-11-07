@@ -35,27 +35,27 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   }, [busy, onCancel]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40" onClick={() => !busy && onCancel()} />
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 animate-fade-in">
+      <div className="absolute inset-0 bg-ink/40" onClick={() => !busy && onCancel()} />
       <div
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
         aria-describedby="confirm-dialog-body"
-        className="relative w-full max-w-sm bg-white rounded-lg shadow-xl border border-[#DADCE0] p-5"
+        className="relative w-full sm:max-w-sm bg-surface border-t sm:border border-line rounded-none sm:rounded-sm p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:pb-5"
       >
         <div className="flex items-start gap-3">
-          <div className="p-2 rounded-full bg-[#FCE8E6] text-[#D93025] shrink-0">
+          <div className="pt-1 text-danger shrink-0">
             <AlertTriangle className="w-5 h-5" />
           </div>
           <div className="min-w-0">
-            <h2 id="confirm-dialog-title" className="text-base font-semibold text-[#202124]">
+            <h2 id="confirm-dialog-title" className="text-lg text-ink">
               {title}
             </h2>
-            <p id="confirm-dialog-body" className="mt-1 text-sm text-[#5F6368]">
+            <p id="confirm-dialog-body" className="mt-1 text-sm text-muted">
               {body}
             </p>
-            {error && <p className="mt-2 text-sm text-[#D93025]">{error}</p>}
+            {error && <p className="mt-2 text-sm text-danger">{error}</p>}
           </div>
         </div>
         <div className="mt-5 flex justify-end gap-2">
@@ -64,7 +64,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             type="button"
             onClick={onCancel}
             disabled={busy}
-            className="px-3 py-1.5 text-sm font-medium rounded-md border border-[#DADCE0] text-[#202124] hover:bg-[#F3F3F1] disabled:opacity-50 cursor-pointer"
+            className="flex-1 sm:flex-none min-h-11 px-4 text-sm rounded-sm border border-line-strong text-ink hover:bg-wash disabled:opacity-50 cursor-pointer"
           >
             {cancelLabel}
           </button>
@@ -72,7 +72,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             type="button"
             onClick={onConfirm}
             disabled={busy}
-            className="px-3 py-1.5 text-sm font-semibold rounded-md bg-[#D93025] hover:bg-[#B3261E] text-white disabled:opacity-60 cursor-pointer flex items-center gap-1.5"
+            className="flex-1 sm:flex-none min-h-11 px-4 text-sm font-medium rounded-sm bg-danger hover:bg-danger/90 text-surface disabled:opacity-60 cursor-pointer inline-flex items-center justify-center gap-1.5"
           >
             {busy && <Loader2 className="w-4 h-4 animate-spin" />}
             {confirmLabel}

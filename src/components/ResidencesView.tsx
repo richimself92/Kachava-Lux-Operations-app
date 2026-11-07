@@ -1,206 +1,110 @@
 import React from 'react';
+import { Bath, BedDouble, Plus } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useRequests } from '../context/RequestContext';
 import { translations } from '../i18n/translations';
 import { locationLabel } from '../lib/labels';
-import { BedDouble, Bath, CheckCircle2, Clock, Building2, Home } from 'lucide-react';
+import { HairlineGrid, PageHeader, SectionHead } from './Kit';
+import type { PropertyLocation } from '../types';
 
 interface ResidencesViewProps {
   onSelectVilla: (locationCode: string) => void;
   onOpenNewRequestForVilla: (locationCode: string) => void;
 }
 
-export const ResidencesView: React.FC<ResidencesViewProps> = ({
-  onSelectVilla,
-  onOpenNewRequestForVilla,
-}) => {
+export const ResidencesView: React.FC<ResidencesViewProps> = ({ onSelectVilla, onOpenNewRequestForVilla }) => {
   const { language } = useAuth();
   const { residences, activeTicketCountsByVilla } = useRequests();
   const t = translations[language];
+  const es = language === 'es';
 
   const villasList = residences.filter((r) => r.type === 'villa');
   const otherLocationsList = residences.filter((r) => r.type === 'facility');
 
+  const LocationCard: React.FC<{ loc: PropertyLocation; villa: boolean }> = ({ loc, villa }) => {
+    const activeCount = activeTicketCountsByVilla[loc.code] || 0;
+    const hasIssues = activeCount > 0;
+    return (
+      <article className="bg-surface flex flex-col min-w-0">
+        <div className="flex-1 p-4 sm:p-5">
+          <div className="flex items-start justify-between gap-3">
+            <h3 className="text-lg leading-snug text-ink min-w-0 break-words">{villa ? loc.name : locationLabel(t, loc.code, loc.name)}</h3>
+            <span className={`flex items-center gap-1.5 text-xs shrink-0 pt-1.5 ${hasIssues ? 'text-pending' : 'text-ok'}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${hasIssues ? 'bg-pending' : 'bg-ok'}`} aria-hidden />
+              {hasIssues ? t.hasIssuesStatus : t.operationalStatus}
+            </span>
+          </div>
+
+          {villa && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
+              <span className="flex items-center gap-1.5">
+                <BedDouble className="w-3.5 h-3.5" strokeWidth={1.5} />
+                {loc.bedrooms} {t.bedroomsLabel}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Bath className="w-3.5 h-3.5" strokeWidth={1.5} />
+                {loc.bathrooms} {t.bathroomsLabel}
+              </span>
+            </div>
+          )}
+
+          <div className="mt-5 flex items-baseline justify-between gap-3">
+            <span className="kl-label">{t.openRequestsLabel}</span>
+            <span className={`font-display text-3xl leading-none tabular-nums ${hasIssues ? 'text-pending' : 'text-faint'}`}>
+              {activeCount}
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 border-t border-line divide-x divide-line">
+          <button
+            onClick={() => onSelectVilla(loc.code)}
+            className="min-h-11 px-2 text-sm text-ink hover:bg-wash transition-colors cursor-pointer"
+          >
+            {t.viewRequestsBtn}
+          </button>
+          <button
+            onClick={() => onOpenNewRequestForVilla(loc.code)}
+            className="min-h-11 px-2 inline-flex items-center justify-center gap-1.5 text-sm text-brand hover:bg-brand-wash transition-colors cursor-pointer"
+          >
+            <Plus className="w-4 h-4" strokeWidth={1.5} />
+            {t.newRequestBtn}
+          </button>
+        </div>
+      </article>
+    );
+  };
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-2 border-b border-[#DADCE0]">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-semibold text-[#202124] tracking-tight">
-            {t.residencesTitle}
-          </h1>
-        </div>
-        <div className="text-xs text-[#5F6368] font-medium">
-          {t.locationSummary
-            .replace('{villas}', String(villasList.length))
-            .replace('{facilities}', String(otherLocationsList.length))}
-        </div>
-      </div>
+    <div className="space-y-10 sm:space-y-14">
+      <PageHeader
+        eyebrow={es ? '03 — Ubicaciones' : '03 — Locations'}
+        title={t.residencesTitle}
+        meta={t.locationSummary
+          .replace('{villas}', String(villasList.length))
+          .replace('{facilities}', String(otherLocationsList.length))}
+      />
 
-      {/* Section 1: Private Villas (8 Villas in exact order) */}
-      <div className="space-y-3">
-        <div className="flex items-center gap-1.5 text-xs font-bold text-[#6D4627] uppercase tracking-wider">
-          <Home className="w-4 h-4" />
-          <span>{t.villasSectionTitle} (8)</span>
-        </div>
+      <section>
+        <SectionHead index={es ? 'Villas' : 'Villas'} title={`${t.villasSectionTitle} (${villasList.length})`} />
+        <HairlineGrid className="grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
+          {villasList.map((villa) => (
+            <LocationCard key={villa.id} loc={villa} villa />
+          ))}
+        </HairlineGrid>
+      </section>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-          {villasList.map((villa) => {
-            const activeCount = activeTicketCountsByVilla[villa.code] || 0;
-            const hasIssues = activeCount > 0;
-
-            return (
-              <div
-                key={villa.id}
-                className={`bg-white border rounded-lg p-3.5 shadow-2xs flex flex-col justify-between transition-all ${
-                  hasIssues
-                    ? 'border-[#E37400]/40 ring-1 ring-[#E37400]/20'
-                    : 'border-[#DADCE0] hover:border-[#6D4627]'
-                }`}
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-lg font-bold text-[#6D4627]">
-                      {villa.name}
-                    </h3>
-                    <span
-                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${
-                        hasIssues
-                          ? 'bg-[#FEF7E0] text-[#E37400] border border-[#FEEFC3]'
-                          : 'bg-[#E6F4EA] text-[#137333] border border-[#CEEAD6]'
-                      }`}
-                    >
-                      {hasIssues ? (
-                        <>
-                          <Clock className="w-3 h-3" />
-                          <span>{t.hasIssuesStatus}</span>
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle2 className="w-3 h-3" />
-                          <span>{t.operationalStatus}</span>
-                        </>
-                      )}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-3 text-xs text-[#5F6368] mb-3">
-                    <div className="flex items-center gap-1">
-                      <BedDouble className="w-3.5 h-3.5 text-[#6D4627]" />
-                      <span>{villa.bedrooms} {t.bedroomsLabel}</span>
-                    </div>
-                    <span>•</span>
-                    <div className="flex items-center gap-1">
-                      <Bath className="w-3.5 h-3.5 text-[#6D4627]" />
-                      <span>{villa.bathrooms} {t.bathroomsLabel}</span>
-                    </div>
-                  </div>
-
-                  <div className="bg-[#F3F3F1] rounded p-2 text-xs flex items-center justify-between">
-                    <span className="text-[#5F6368]">{t.openRequestsLabel}:</span>
-                    <span className={`font-semibold ${hasIssues ? 'text-[#E37400]' : 'text-[#202124]'}`}>
-                      {activeCount}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-1.5 pt-3 mt-3 border-t border-[#DADCE0]">
-                  <button
-                    onClick={() => onSelectVilla(villa.code)}
-                    className="w-full py-1.5 px-2 bg-white hover:bg-[#F3F3F1] border border-[#DADCE0] text-[#202124] text-xs font-medium rounded transition-colors cursor-pointer text-center"
-                  >
-                    {t.viewRequestsBtn}
-                  </button>
-
-                  <button
-                    onClick={() => onOpenNewRequestForVilla(villa.code)}
-                    className="w-full py-1.5 px-2 bg-[#6D4627] hover:bg-[#55361D] text-white text-xs font-medium rounded transition-colors cursor-pointer text-center"
-                  >
-                    {t.newRequestBtn}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Section 2: Other Property Locations (facilities) */}
-      <div className="space-y-3 pt-2">
-        <div className="flex items-center gap-1.5 text-xs font-bold text-[#5F6368] uppercase tracking-wider">
-          <Building2 className="w-4 h-4 text-[#6D4627]" />
-          <span>{t.facilitiesSectionTitle} ({otherLocationsList.length})</span>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-          {otherLocationsList.map((facility) => {
-            const activeCount = activeTicketCountsByVilla[facility.code] || 0;
-            const hasIssues = activeCount > 0;
-            const facilityDisplayName = locationLabel(t, facility.code, facility.name);
-
-            return (
-              <div
-                key={facility.id}
-                className={`bg-white border rounded-lg p-3.5 shadow-2xs flex flex-col justify-between transition-all ${
-                  hasIssues
-                    ? 'border-[#E37400]/40 ring-1 ring-[#E37400]/20'
-                    : 'border-[#DADCE0] hover:border-[#6D4627]'
-                }`}
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-base font-bold text-[#202124]">
-                      {facilityDisplayName}
-                    </h3>
-                    <span
-                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${
-                        hasIssues
-                          ? 'bg-[#FEF7E0] text-[#E37400] border border-[#FEEFC3]'
-                          : 'bg-[#E6F4EA] text-[#137333] border border-[#CEEAD6]'
-                      }`}
-                    >
-                      {hasIssues ? (
-                        <>
-                          <Clock className="w-3 h-3" />
-                          <span>{t.hasIssuesStatus}</span>
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle2 className="w-3 h-3" />
-                          <span>{t.operationalStatus}</span>
-                        </>
-                      )}
-                    </span>
-                  </div>
-
-                  <div className="bg-[#F3F3F1] rounded p-2 text-xs flex items-center justify-between mb-3">
-                    <span className="text-[#5F6368]">{t.openRequestsLabel}:</span>
-                    <span className={`font-semibold ${hasIssues ? 'text-[#E37400]' : 'text-[#202124]'}`}>
-                      {activeCount}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-1.5 pt-3 border-t border-[#DADCE0]">
-                  <button
-                    onClick={() => onSelectVilla(facility.code)}
-                    className="w-full py-1.5 px-2 bg-white hover:bg-[#F3F3F1] border border-[#DADCE0] text-[#202124] text-xs font-medium rounded transition-colors cursor-pointer text-center"
-                  >
-                    {t.viewRequestsBtn}
-                  </button>
-
-                  <button
-                    onClick={() => onOpenNewRequestForVilla(facility.code)}
-                    className="w-full py-1.5 px-2 bg-[#6D4627] hover:bg-[#55361D] text-white text-xs font-medium rounded transition-colors cursor-pointer text-center"
-                  >
-                    {t.newRequestBtn}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      <section>
+        <SectionHead
+          index={es ? 'Instalaciones' : 'Facilities'}
+          title={`${t.facilitiesSectionTitle} (${otherLocationsList.length})`}
+        />
+        <HairlineGrid className="grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+          {otherLocationsList.map((facility) => (
+            <LocationCard key={facility.id} loc={facility} villa={false} />
+          ))}
+        </HairlineGrid>
+      </section>
     </div>
   );
 };

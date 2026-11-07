@@ -1,15 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import {
-  ClipboardList,
-  Home,
-  LayoutDashboard,
-  LogOut,
-  PanelLeftClose,
-  PanelLeftOpen,
-  PlusCircle,
-  Users,
-  X,
-} from 'lucide-react';
+import { ClipboardList, Home, LayoutDashboard, LogOut, PanelLeftClose, PanelLeftOpen, Plus, Users, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useRequests } from '../context/RequestContext';
 import { translations } from '../i18n/translations';
@@ -23,12 +13,6 @@ interface SidebarProps {
 }
 
 const COLLAPSED_KEY = 'klm.sidebarCollapsed';
-
-const ROLE_BADGE: Record<string, string> = {
-  admin: 'bg-[#6D4627] text-white',
-  supervisor: 'bg-[#989166] text-white',
-  staff: 'bg-[#F3F3F1] text-[#202124] border border-[#DADCE0]',
-};
 
 export const Sidebar: React.FC<SidebarProps> = ({
   currentTab,
@@ -48,21 +32,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
     localStorage.setItem(COLLAPSED_KEY, collapsed ? '1' : '0');
   }, [collapsed]);
 
+  // Mobile drawer: Escape closes it.
+  useEffect(() => {
+    if (!isOpenMobile) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onCloseMobile();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isOpenMobile, onCloseMobile]);
+
   const unreviewedCount = requests.filter((r) => r.status === 'sin_revisar').length;
   const activeTotal = requests.filter((r) => r.status !== 'completada').length;
 
   const navItems = [
-    { id: 'dashboard', label: t.navDashboard, icon: LayoutDashboard, badge: null as number | null, badgeColor: '' },
-    {
-      id: 'requests',
-      label: t.navRequests,
-      icon: ClipboardList,
-      badge: activeTotal > 0 ? activeTotal : null,
-      badgeColor: unreviewedCount > 0 ? 'bg-[#E37400] text-white' : 'bg-[#1A73E8] text-white',
-    },
-    { id: 'residences', label: t.navResidences, icon: Home, badge: null, badgeColor: '' },
-    ...(role === 'admin' ? [{ id: 'users', label: t.navUsers, icon: Users, badge: null, badgeColor: '' }] : []),
+    { id: 'dashboard', label: t.navDashboard, icon: LayoutDashboard, badge: null as number | null },
+    { id: 'requests', label: t.navRequests, icon: ClipboardList, badge: activeTotal > 0 ? activeTotal : null },
+    { id: 'residences', label: t.navResidences, icon: Home, badge: null },
+    ...(role === 'admin' ? [{ id: 'users', label: t.navUsers, icon: Users, badge: null }] : []),
   ];
+  // Unreviewed work pulls the count into ochre; otherwise it stays quiet.
+  const badgeTone = unreviewedCount > 0 ? 'text-pending' : 'text-muted';
 
   const roleLabel = role === 'admin' ? 'Admin' : role === 'supervisor' ? 'Supervisor' : 'Staff';
   const initial = currentUser?.displayName.charAt(0).toUpperCase() || 'U';
@@ -70,18 +58,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   /** `rail` = collapsed desktop rail; the mobile drawer is always expanded. */
   const content = (rail: boolean, mobile: boolean) => (
-    <div className={`flex flex-col h-full bg-white border-r border-[#DADCE0] select-none ${rail ? 'w-14' : 'w-64'}`}>
-      {/* Top: app tag + show/hide toggle (or close on mobile) */}
-      <div className={`flex items-center border-b border-[#DADCE0] ${rail ? 'justify-center p-2' : 'justify-between gap-2 p-3'}`}>
-        {!rail && (
-          <span className="text-xs sm:text-sm font-semibold tracking-tight text-[#6D4627] bg-[#F4EFEA] px-2.5 py-1 rounded-md border border-[#E8DEC9] truncate">
-            {t.appTitle}
-          </span>
-        )}
+    <div
+      className={`flex flex-col h-full overflow-y-auto overscroll-contain bg-paper border-r border-line select-none ${
+        rail ? 'w-16' : mobile ? 'w-[min(18rem,85vw)]' : 'w-64'
+      } ${mobile ? 'pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)]' : ''}`}
+    >
+      {/* Top: app label + show/hide toggle (or close on mobile) */}
+      <div className={`flex items-center h-14 ${rail ? 'justify-center' : 'justify-between gap-2 pl-5 pr-2'}`}>
+        {!rail && <span className="kl-label truncate">{t.appTitle}</span>}
         {mobile ? (
           <button
             onClick={onCloseMobile}
-            className="p-1 text-[#5F6368] hover:text-[#202124] rounded-md cursor-pointer"
+            className="inline-flex items-center justify-center w-10 h-10 text-muted hover:text-ink cursor-pointer"
             aria-label={es ? 'Cerrar menú' : 'Close menu'}
           >
             <X className="w-5 h-5" />
@@ -89,7 +77,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         ) : (
           <button
             onClick={() => setCollapsed((c) => !c)}
-            className="p-1.5 text-[#5F6368] hover:text-[#202124] hover:bg-[#F3F3F1] rounded-md cursor-pointer shrink-0"
+            className="inline-flex items-center justify-center w-9 h-9 text-muted hover:text-ink hover:bg-wash rounded-sm cursor-pointer shrink-0"
             title={toggleLabel}
             aria-label={toggleLabel}
             aria-expanded={!rail}
@@ -100,7 +88,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Primary action */}
-      <div className={rail ? 'p-2' : 'p-3'}>
+      <div className={rail ? 'px-3 pb-4' : 'px-5 pb-6'}>
         <button
           onClick={() => {
             onOpenNewRequest();
@@ -108,106 +96,96 @@ export const Sidebar: React.FC<SidebarProps> = ({
           }}
           title={t.navNewRequest}
           aria-label={t.navNewRequest}
-          className={`w-full flex items-center justify-center gap-2 bg-[#6D4627] hover:bg-[#55361D] text-white font-medium text-xs sm:text-sm rounded-md shadow-xs transition-colors cursor-pointer ${
-            rail ? 'p-2' : 'px-3 py-2'
+          className={`w-full flex items-center justify-center gap-2 bg-brand hover:bg-brand-deep text-surface text-sm font-medium rounded-sm transition-colors cursor-pointer ${
+            rail ? 'h-10' : 'min-h-11 px-3'
           }`}
         >
-          <PlusCircle className="w-4 h-4 shrink-0" />
+          <Plus className="w-4 h-4 shrink-0" />
           {!rail && <span>{t.navNewRequest}</span>}
         </button>
       </div>
 
       {/* Navigation */}
-      <nav className={`flex-1 py-1 space-y-1 overflow-y-auto ${rail ? 'px-1.5' : 'px-2'}`}>
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = currentTab === item.id;
-          return (
-            <button
-              key={item.id}
-              onClick={() => {
-                onSelectTab(item.id);
-                onCloseMobile();
-              }}
-              title={rail ? item.label : undefined}
-              aria-label={item.label}
-              className={`relative w-full flex items-center rounded-md text-xs sm:text-sm font-medium transition-colors cursor-pointer text-left ${
-                rail ? 'justify-center p-2' : 'justify-between px-3 py-2'
-              } ${
-                isActive
-                  ? `bg-[#F4EFEA] text-[#6D4627] font-semibold ${rail ? '' : 'border-l-4 border-[#6D4627]'}`
-                  : 'text-[#202124] hover:bg-[#F3F3F1]'
-              }`}
-            >
-              <span className="flex items-center gap-2.5 truncate">
-                <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#6D4627]' : 'text-[#5F6368]'}`} />
-                {!rail && <span className="truncate">{item.label}</span>}
-              </span>
-              {item.badge !== null &&
-                (rail ? (
-                  <span
-                    className={`absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 text-[9px] leading-4 font-bold rounded-full text-center ${item.badgeColor}`}
-                  >
-                    {item.badge}
+      <nav className="flex-1 shrink-0 border-t border-line pt-3 pb-3 px-3" aria-label={es ? 'Principal' : 'Main'}>
+        <ul className="space-y-0.5">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = currentTab === item.id;
+            return (
+              <li key={item.id}>
+                <button
+                  onClick={() => {
+                    onSelectTab(item.id);
+                    onCloseMobile();
+                  }}
+                  title={rail ? item.label : undefined}
+                  aria-label={item.label}
+                  aria-current={isActive ? 'page' : undefined}
+                  className={`relative w-full flex items-center min-h-11 rounded-sm text-sm transition-colors cursor-pointer text-left ${
+                    rail ? 'justify-center' : 'justify-between gap-3 px-2'
+                  } ${isActive ? 'bg-wash text-ink' : 'text-muted hover:text-ink hover:bg-wash/60'}`}
+                >
+                  {/* Active marker: a short brown rule, the only accent in the menu */}
+                  {isActive && <span className="absolute left-0 top-2.5 bottom-2.5 w-px bg-brand" aria-hidden />}
+                  <span className="flex items-center gap-3 min-w-0">
+                    <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-brand' : ''}`} strokeWidth={1.5} />
+                    {!rail && <span className="truncate">{item.label}</span>}
                   </span>
-                ) : (
-                  <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${item.badgeColor}`}>{item.badge}</span>
-                ))}
-            </button>
-          );
-        })}
+                  {item.badge !== null &&
+                    (rail ? (
+                      <span className={`absolute top-1 right-0.5 text-[10px] leading-none tabular-nums ${badgeTone}`}>{item.badge}</span>
+                    ) : (
+                      <span className={`text-xs tabular-nums ${badgeTone}`}>{item.badge}</span>
+                    ))}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
       </nav>
 
       {/* Signed-in user */}
-      <div className={`border-t border-[#DADCE0] ${rail ? 'p-2 flex flex-col items-center gap-2' : 'p-3 space-y-2'}`}>
+      <div className={`border-t border-line ${rail ? 'py-3 flex flex-col items-center gap-2' : 'px-5 py-4 space-y-3'}`}>
         {rail ? (
           <div
-            className="w-8 h-8 rounded-full bg-[#6D4627] text-white flex items-center justify-center font-bold text-xs"
+            className="w-8 h-8 rounded-full border border-line-strong text-ink flex items-center justify-center font-display text-xs"
             title={`${currentUser?.displayName ?? ''} · ${currentUser?.email ?? ''}`}
           >
             {initial}
           </div>
         ) : (
           <div className="min-w-0">
-            <div className="min-w-0 text-xs">
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-semibold text-[#202124] truncate">{currentUser?.displayName}</span>
-                <span
-                  className={`shrink-0 px-1.5 py-0.5 rounded-sm text-[10px] font-semibold uppercase ${ROLE_BADGE[role] ?? ROLE_BADGE.staff}`}
-                >
-                  {roleLabel}
-                </span>
-              </div>
-              <div className="text-[#5F6368] truncate" title={currentUser?.email}>
-                {currentUser?.email}
-              </div>
-              {currentUser?.title && <div className="text-[10px] text-[#5F6368] truncate">{currentUser.title}</div>}
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-sm text-ink truncate">{currentUser?.displayName}</span>
+              <span className="kl-label shrink-0 !text-[10px]">{roleLabel}</span>
             </div>
+            <div className="text-xs text-muted truncate" title={currentUser?.email}>
+              {currentUser?.email}
+            </div>
+            {currentUser?.title && <div className="text-xs text-muted truncate">{currentUser.title}</div>}
           </div>
         )}
         <button
           onClick={() => void signOut()}
           title={t.signOutButton}
           aria-label={t.signOutButton}
-          className={`flex items-center gap-2 rounded-md text-xs font-medium text-[#202124] hover:bg-[#F3F3F1] border border-[#DADCE0] transition-colors cursor-pointer ${
-            rail ? 'p-2' : 'w-full justify-center px-2 py-1.5'
+          className={`flex items-center gap-2 text-sm text-muted hover:text-ink transition-colors cursor-pointer ${
+            rail ? 'justify-center w-10 h-10 hover:bg-wash rounded-sm' : 'min-h-10 -ml-1 px-1'
           }`}
         >
-          <LogOut className="w-4 h-4 text-[#5F6368]" />
+          <LogOut className="w-4 h-4" strokeWidth={1.5} />
           {!rail && <span>{t.signOutButton}</span>}
         </button>
       </div>
 
       {/* Footer */}
-      <div className={`border-t border-[#DADCE0] bg-[#FAFAFA] text-[#5F6368] ${rail ? 'p-2 text-center text-[9px]' : 'p-3 text-[11px]'}`}>
+      <div className={`border-t border-line text-muted ${rail ? 'py-3 text-center text-[10px]' : 'px-5 py-3 flex items-center justify-between text-[11px]'}`}>
         {rail ? (
           'v1.1'
         ) : (
           <>
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-medium text-[#202124]">Kachava Lux</span>
-              <span className="text-[10px] text-[#70757A]">v1.1</span>
-            </div>
+            <span className="kl-label !text-[10px]">Kachava Lux</span>
+            <span className="tabular-nums">v1.1</span>
           </>
         )}
       </div>
@@ -216,14 +194,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <>
-      <aside className="hidden md:block shrink-0 h-full">
-        {content(collapsed, false)}
-      </aside>
+      <aside className="hidden md:block shrink-0 h-full">{content(collapsed, false)}</aside>
 
       {isOpenMobile && (
-        <div className="fixed inset-0 z-50 md:hidden flex">
-          <div className="fixed inset-0 bg-black/40 transition-opacity" onClick={onCloseMobile} />
-          <div className="relative flex-1 flex flex-col max-w-xs w-full bg-white z-50">{content(false, true)}</div>
+        <div className="fixed inset-0 z-50 md:hidden flex" role="dialog" aria-modal="true" aria-label={es ? 'Menú' : 'Menu'}>
+          <div className="fixed inset-0 bg-ink/30 animate-fade-in" onClick={onCloseMobile} />
+          {/* Drawer is exactly as wide as its content — no leftover band beside it. */}
+          <div className="relative h-full z-50 animate-fade-in">{content(false, true)}</div>
         </div>
       )}
     </>

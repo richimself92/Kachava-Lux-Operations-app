@@ -18,8 +18,9 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenMobileMenu }) => {
   const langButton = (lang: 'en' | 'es', label: string, title: string) => (
     <button
       onClick={() => setLanguage(lang)}
-      className={`px-1.5 py-0.5 sm:px-2 sm:py-1 text-[11px] sm:text-xs font-medium rounded-sm transition-colors cursor-pointer ${
-        language === lang ? 'bg-white text-[#202124] shadow-xs font-semibold' : 'text-[#5F6368] hover:text-[#202124]'
+      aria-pressed={language === lang}
+      className={`min-w-9 h-10 px-1.5 text-xs tracking-[0.12em] transition-colors cursor-pointer ${
+        language === lang ? 'text-ink underline underline-offset-[6px] decoration-ink' : 'text-muted hover:text-ink'
       }`}
       title={title}
     >
@@ -28,32 +29,35 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenMobileMenu }) => {
   );
 
   return (
-    <header className="shrink-0 z-30 bg-white border-b border-[#DADCE0] shadow-xs">
+    <header className="shrink-0 z-30 bg-paper border-b border-line pt-[env(safe-area-inset-top)]">
       {usingEmulators && (
-        <div className="px-3 sm:px-4 py-1 text-xs font-medium flex items-center bg-[#FEF7E0] text-[#B06000] border-b border-[#FEEFC3]">
-          <Database className="w-3.5 h-3.5 shrink-0 text-[#E37400] mr-2" />
-          <span className="truncate text-[11px] sm:text-xs font-semibold">{t.emulatorBanner}</span>
+        <div className="px-4 py-1.5 flex items-center gap-2 bg-pending-wash text-pending border-b border-pending-line">
+          <Database className="w-3.5 h-3.5 shrink-0" strokeWidth={1.5} />
+          <span className="truncate text-xs">{t.emulatorBanner}</span>
         </div>
       )}
 
-      <div className="w-full px-3 sm:px-4 h-14 sm:h-16 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
+      <div className="w-full h-14 sm:h-16 flex items-center justify-between gap-2 pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] sm:pl-5 sm:pr-5">
+        <div className="flex items-center gap-1 sm:gap-3 min-w-0">
           <button
             onClick={onOpenMobileMenu}
-            className="md:hidden p-1.5 text-[#5F6368] hover:text-[#202124] hover:bg-[#F3F3F1] rounded-md transition-colors shrink-0 cursor-pointer"
-            aria-label="Open Navigation"
+            className="md:hidden inline-flex items-center justify-center w-10 h-10 text-ink hover:bg-wash rounded-sm transition-colors shrink-0 cursor-pointer"
+            aria-label={language === 'es' ? 'Abrir menú' : 'Open menu'}
           >
-            <Menu className="w-5 h-5" />
+            <Menu className="w-5 h-5" strokeWidth={1.5} />
           </button>
           <img
             src="/assets/aistudio/Composition_5_7a06f10c.png"
             alt="Kachava Lux"
-            className="h-6 sm:h-8 md:h-9 w-auto max-w-[140px] sm:max-w-none object-contain shrink-0"
+            className="h-7 sm:h-8 md:h-9 w-auto max-w-[150px] sm:max-w-none object-contain shrink-0"
           />
         </div>
 
-        <div className="flex items-center bg-[#F3F3F1] rounded-md p-0.5 border border-[#DADCE0] shrink-0">
+        <div className="flex items-center shrink-0" role="group" aria-label="Language">
           {langButton('en', 'EN', 'English')}
+          <span className="text-line-strong text-xs" aria-hidden>
+            /
+          </span>
           {langButton('es', 'ES', 'Español')}
         </div>
       </div>
