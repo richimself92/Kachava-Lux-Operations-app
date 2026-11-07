@@ -16,14 +16,14 @@ export const PhotoThumb: React.FC<{ photo: PhotoAttachment; onClick?: () => void
       type="button"
       onClick={onClick}
       title={photo.fileName}
-      className={`relative border border-[#DADCE0] rounded overflow-hidden aspect-square bg-[#F3F3F1] flex items-center justify-center cursor-pointer hover:ring-2 hover:ring-[#6D4627]/40 ${className}`}
+      className={`relative border border-line rounded-sm overflow-hidden aspect-square bg-wash flex items-center justify-center cursor-pointer hover:ring-2 hover:ring-brand/40 ${className}`}
     >
       {url ? (
         <img src={url} alt={photo.fileName} className="w-full h-full object-cover" loading="lazy" />
       ) : error ? (
-        <ImageOff className="w-4 h-4 text-[#9AA0A6]" />
+        <ImageOff className="w-4 h-4 text-faint" />
       ) : (
-        <Loader2 className="w-4 h-4 animate-spin text-[#9AA0A6]" />
+        <Loader2 className="w-4 h-4 animate-spin text-faint" />
       )}
     </button>
   );
@@ -41,39 +41,39 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({ photo, language, o
   const es = language === 'es';
 
   return (
-    <div className="fixed inset-0 z-60 bg-black/90 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6" onClick={onClose}>
+    <div className="fixed inset-0 z-60 bg-ink/95 flex items-center justify-center p-0 sm:p-6 animate-fade-in" onClick={onClose}>
       <div
-        className="relative max-w-4xl max-h-[90vh] flex flex-col bg-[#202124] rounded-lg overflow-hidden border border-[#5F6368]"
+        className="relative w-full sm:w-auto max-w-4xl h-dvh sm:h-auto sm:max-h-[90dvh] flex flex-col bg-ink overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] sm:p-0"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-4 py-2.5 bg-black/60 text-white text-xs border-b border-[#5F6368]">
+        <div className="flex items-center justify-between px-4 py-2.5 bg-ink/60 text-surface text-xs border-b border-muted">
           <div className="flex items-center gap-2 truncate">
-            <span className="font-semibold uppercase px-1.5 py-0.5 rounded text-[10px] bg-[#6D4627]">
+            <span className="font-semibold uppercase px-1.5 py-0.5 rounded-sm text-[10px] bg-brand">
               {photo.kind === 'before' ? (es ? 'Evidencia inicial' : 'Initial issue') : es ? 'Después de reparar' : 'After repair'}
             </span>
-            <span className="truncate text-gray-300">{photo.fileName}</span>
+            <span className="truncate text-line">{photo.fileName}</span>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-gray-400 text-[11px] hidden sm:inline">
+            <span className="text-faint text-[11px] hidden sm:inline">
               {photo.uploadedBy.name}
               {photo.uploadedAt ? ` · ${formatCancunDateTime(photo.uploadedAt, language)}` : ''}
             </span>
-            <button onClick={onClose} className="p-1 hover:bg-white/20 rounded text-white transition-colors cursor-pointer" aria-label="Close">
+            <button onClick={onClose} className="p-1 hover:bg-surface/20 rounded-sm text-surface transition-colors cursor-pointer" aria-label="Close">
               <X className="w-5 h-5" />
             </button>
           </div>
         </div>
 
-        <div className="flex-1 flex items-center justify-center p-2 bg-black/80 overflow-auto min-h-[200px] min-w-[280px]">
+        <div className="flex-1 flex items-center justify-center p-2 bg-ink/80 overflow-auto min-h-[200px] min-w-[280px]">
           {url ? (
-            <img src={url} alt={photo.fileName} className="max-h-[75vh] max-w-full object-contain rounded" />
+            <img src={url} alt={photo.fileName} className="max-h-[75dvh] max-w-full object-contain" />
           ) : error ? (
-            <div className="text-gray-300 text-xs flex items-center gap-2">
+            <div className="text-line text-xs flex items-center gap-2">
               <ImageOff className="w-4 h-4" />
               {es ? 'No se pudo cargar la foto.' : 'Could not load the photo.'}
             </div>
           ) : (
-            <Loader2 className="w-6 h-6 animate-spin text-gray-300" />
+            <Loader2 className="w-6 h-6 animate-spin text-line" />
           )}
         </div>
       </div>

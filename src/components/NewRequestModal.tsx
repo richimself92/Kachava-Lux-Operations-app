@@ -79,33 +79,33 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
       key: 'urgent',
       label: language === 'es' ? 'Urgente' : 'Urgent',
       sla: prioritySla(t, 'urgent'),
-      color: 'text-[#D93025]',
-      activeBorder: 'border-[#D93025] bg-[#FCE8E6]',
-      badgeBg: 'bg-[#D93025] text-white',
+      color: 'text-danger',
+      activeBorder: 'border-danger bg-danger-wash',
+      badgeBg: 'bg-danger text-surface',
     },
     {
       key: 'high',
       label: language === 'es' ? 'Alta' : 'High',
       sla: prioritySla(t, 'high'),
-      color: 'text-[#E37400]',
-      activeBorder: 'border-[#E37400] bg-[#FEF7E0]',
-      badgeBg: 'bg-[#E37400] text-white',
+      color: 'text-pending',
+      activeBorder: 'border-pending bg-pending-wash',
+      badgeBg: 'bg-pending text-surface',
     },
     {
       key: 'normal',
       label: language === 'es' ? 'Normal' : 'Normal',
       sla: prioritySla(t, 'normal'),
-      color: 'text-[#5F6368]',
-      activeBorder: 'border-[#6D4627] bg-[#F4EFEA]',
-      badgeBg: 'bg-[#6D4627] text-white',
+      color: 'text-muted',
+      activeBorder: 'border-brand bg-brand-wash',
+      badgeBg: 'bg-brand text-surface',
     },
     {
       key: 'low',
       label: language === 'es' ? 'Baja' : 'Low',
       sla: prioritySla(t, 'low'),
-      color: 'text-[#70757A]',
-      activeBorder: 'border-[#70757A] bg-[#F1F3F4]',
-      badgeBg: 'bg-[#70757A] text-white',
+      color: 'text-muted',
+      activeBorder: 'border-muted bg-wash',
+      badgeBg: 'bg-muted text-surface',
     },
   ];
 
@@ -222,62 +222,59 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-2xs flex items-center justify-center p-3 sm:p-6">
-      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full border border-[#DADCE0] overflow-hidden my-auto max-h-[94vh] flex flex-col">
+    <div className="fixed inset-0 z-50 bg-ink/40 flex items-stretch sm:items-center justify-center sm:p-6 animate-fade-in" role="dialog" aria-modal="true" aria-labelledby="new-request-title">
+      <div className="bg-surface w-full sm:max-w-2xl h-dvh sm:h-auto sm:max-h-[92dvh] flex flex-col overflow-hidden sm:border sm:border-line rounded-none sm:rounded-sm">
         {/* Header */}
-        <div className="px-5 py-3.5 border-b border-[#DADCE0] flex items-center justify-between bg-[#FAFAFA]">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 bg-[#F4EFEA] text-[#6D4627] rounded-md">
-              <Wrench className="w-4 h-4" />
-            </div>
-            <div>
-              <h2 className="text-base font-semibold text-[#202124]">
-                {t.newRequestTitle}
-              </h2>
-            </div>
+        <div className="shrink-0 flex items-center justify-between gap-3 border-b border-line pl-5 pr-2 sm:pr-3 pt-[env(safe-area-inset-top)] sm:pt-0 min-h-14">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <Wrench className="w-4 h-4 text-brand shrink-0" strokeWidth={1.5} />
+            <h2 id="new-request-title" className="text-lg text-ink truncate">
+              {t.newRequestTitle}
+            </h2>
           </div>
           <button
             onClick={onClose}
-            className="p-1 text-[#5F6368] hover:text-[#202124] rounded-md transition-colors cursor-pointer"
+            aria-label={t.cancel}
+            className="inline-flex items-center justify-center w-10 h-10 shrink-0 text-muted hover:text-ink hover:bg-wash rounded-sm transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="overflow-y-auto p-5 space-y-4 text-xs sm:text-sm">
+        <form onSubmit={handleSubmit} className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-5 space-y-5 text-sm">
           {formError && (
-            <div className="p-2.5 bg-[#FCE8E6] border border-[#FAD2CF] rounded text-[#D93025] flex items-start gap-2 text-xs">
+            <div className="p-2.5 bg-danger-wash border border-danger-line rounded-sm text-danger flex items-start gap-2 text-xs">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <span>{formError}</span>
             </div>
           )}
 
           {/* Automatic Metadata Banner */}
-          <div className="bg-[#F3F3F1] border border-[#DADCE0] rounded p-2.5 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+          <div className="border-y border-line py-3 grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3 text-sm">
             <div>
-              <span className="text-[#5F6368] block text-[10px] uppercase font-semibold">
+              <span className="kl-label block mb-1">
                 {t.ticketIdLabel}
               </span>
-              <span className="font-medium italic text-[#5F6368]">
+              <span className="font-medium italic text-muted">
                 {t.ticketAssignedOnSubmit}
               </span>
             </div>
             <div>
-              <span className="text-[#5F6368] block text-[10px] uppercase font-semibold">
+              <span className="kl-label block mb-1">
                 {t.submittingUserLabel}
               </span>
-              <span className="font-medium text-[#202124] flex items-center gap-1">
-                <User className="w-3 h-3 text-[#6D4627]" />
+              <span className="font-medium text-ink flex items-center gap-1">
+                <User className="w-3 h-3 text-brand" />
                 {currentUser?.displayName}
               </span>
             </div>
             <div>
-              <span className="text-[#5F6368] block text-[10px] uppercase font-semibold">
+              <span className="kl-label block mb-1">
                 {t.submissionTimeLabel}
               </span>
-              <span className="font-medium text-[#202124] flex items-center gap-1 tabular-nums" aria-live="off">
-                <Calendar className="w-3 h-3 text-[#6D4627]" />
+              <span className="font-medium text-ink flex items-center gap-1 tabular-nums" aria-live="off">
+                <Calendar className="w-3 h-3 text-brand" />
                 {formatCancunDate(now, language)} · {formatCancunTime(now, language, true)}
               </span>
             </div>
@@ -285,13 +282,13 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
 
           {/* Grouped Location Selector (Villas + Other Locations) */}
           <div>
-            <label className="block text-xs font-semibold text-[#202124] mb-1">
-              {t.villaSelectLabel} <span className="text-[#D93025]">*</span>
+            <label className="block text-sm text-ink mb-1.5">
+              {t.villaSelectLabel} <span className="text-danger">*</span>
             </label>
             <select
               value={locationCode}
               onChange={(e) => setLocationCode(e.target.value)}
-              className="w-full bg-white border border-[#DADCE0] rounded px-3 py-2 text-sm text-[#202124] focus:outline-hidden focus:border-[#1A73E8]"
+              className="w-full bg-surface border border-line rounded-sm px-3 min-h-11 text-sm text-ink focus:outline-hidden focus:border-ink cursor-pointer"
               required
             >
               <optgroup label={t.locGroupVillas}>
@@ -314,13 +311,13 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
           {/* Category & Common Area Secondary Selector */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-[#202124] mb-1">
-                {t.categoryLabel} <span className="text-[#D93025]">*</span>
+              <label className="block text-sm text-ink mb-1.5">
+                {t.categoryLabel} <span className="text-danger">*</span>
               </label>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value as MaintenanceCategory)}
-                className="w-full bg-white border border-[#DADCE0] rounded px-3 py-2 text-sm text-[#202124] focus:outline-hidden focus:border-[#1A73E8]"
+                className="w-full bg-surface border border-line rounded-sm px-3 min-h-11 text-sm text-ink focus:outline-hidden focus:border-ink cursor-pointer"
                 required
               >
                 {categories.map((c) => (
@@ -333,16 +330,16 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
 
             {/* Secondary location selector when Common Areas is selected */}
             {category === 'common_areas' ? (
-              <div className="animate-fade-in bg-[#F4EFEA] border border-[#E8DEC9] p-2.5 rounded">
-                <label className="block text-xs font-semibold text-[#6D4627] mb-1">
-                  {t.commonAreaSubLocationLabel} <span className="text-[#D93025]">*</span>
+              <div className="animate-fade-in border-l-2 border-brand pl-3 py-1">
+                <label className="block text-xs font-semibold text-brand mb-1">
+                  {t.commonAreaSubLocationLabel} <span className="text-danger">*</span>
                 </label>
                 <div className="grid grid-cols-2 gap-2 mt-1">
                   <label
-                    className={`flex items-center justify-center gap-1.5 p-2 rounded border cursor-pointer text-xs font-medium transition-colors ${
+                    className={`flex items-center justify-center gap-1.5 min-h-11 px-2 rounded-sm border cursor-pointer text-sm transition-colors ${
                       commonAreaSubLocation === 'hall'
-                        ? 'bg-white border-[#6D4627] text-[#6D4627] font-bold shadow-2xs'
-                        : 'bg-white/80 border-[#DADCE0] text-[#5F6368]'
+                        ? 'bg-surface border-brand text-brand font-medium'
+                        : 'bg-surface/80 border-line text-muted'
                     }`}
                   >
                     <input
@@ -357,10 +354,10 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
                   </label>
 
                   <label
-                    className={`flex items-center justify-center gap-1.5 p-2 rounded border cursor-pointer text-xs font-medium transition-colors ${
+                    className={`flex items-center justify-center gap-1.5 min-h-11 px-2 rounded-sm border cursor-pointer text-sm transition-colors ${
                       commonAreaSubLocation === 'parking'
-                        ? 'bg-white border-[#6D4627] text-[#6D4627] font-bold shadow-2xs'
-                        : 'bg-white/80 border-[#DADCE0] text-[#5F6368]'
+                        ? 'bg-surface border-brand text-brand font-medium'
+                        : 'bg-surface/80 border-line text-muted'
                     }`}
                   >
                     <input
@@ -376,7 +373,7 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
                 </div>
               </div>
             ) : (
-              <div className="flex items-center text-xs text-[#5F6368] italic self-end pb-2">
+              <div className="flex items-center text-xs text-muted italic self-end pb-2">
                 <span>{language === 'es' ? 'Seleccione categoría para opciones específicas' : 'Select category for system options'}</span>
               </div>
             )}
@@ -385,16 +382,16 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
           {/* Priority Options with Response Expectation */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-xs font-semibold text-[#202124]">
-                {t.priorityLabel} <span className="text-[#D93025]">*</span>
+              <label className="block text-sm text-ink">
+                {t.priorityLabel} <span className="text-danger">*</span>
               </label>
-              <span className="text-[11px] text-[#5F6368] flex items-center gap-1">
-                <Clock className="w-3 h-3 text-[#6D4627]" />
+              <span className="text-[11px] text-muted flex items-center gap-1">
+                <Clock className="w-3 h-3 text-brand" />
                 <span>{language === 'es' ? 'Tiempo de respuesta asignado' : 'Target SLA response'}</span>
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
               {priorityOptions.map((p) => {
                 const isSelected = priority === p.key;
                 return (
@@ -402,21 +399,22 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
                     key={p.key}
                     type="button"
                     onClick={() => setPriority(p.key)}
-                    className={`p-2.5 rounded-lg border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                    aria-pressed={isSelected}
+                    className={`p-3 min-h-11 rounded-sm border text-left transition-colors cursor-pointer flex flex-col justify-between ${
                       isSelected
-                        ? `${p.activeBorder} ring-2 ring-current font-medium shadow-2xs`
-                        : 'border-[#DADCE0] bg-white hover:bg-gray-50'
+                        ? `${p.activeBorder} border-ink bg-wash`
+                        : "border-line bg-surface hover:bg-wash"
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className={`text-xs font-bold uppercase ${p.color}`}>
+                      <span className={`text-xs font-medium uppercase ${p.color}`}>
                         {p.label}
                       </span>
                       {isSelected && (
                         <span className="w-2 h-2 rounded-full bg-current" />
                       )}
                     </div>
-                    <div className="mt-1 text-xs font-semibold text-[#202124]">
+                    <div className="mt-1 text-sm text-ink">
                       — {p.sla}
                     </div>
                   </button>
@@ -427,8 +425,8 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
 
           {/* Notes */}
           <div>
-            <label htmlFor="new-request-notes" className="block text-xs font-semibold text-[#202124] mb-1">
-              {t.notesLabel} <span className="text-[#D93025]">*</span>
+            <label htmlFor="new-request-notes" className="block text-sm text-ink mb-1.5">
+              {t.notesLabel} <span className="text-danger">*</span>
             </label>
             <RichTextEditor
               id="new-request-notes"
@@ -441,17 +439,17 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
           </div>
 
           {/* Photo Attachments */}
-          <div className="border border-[#DADCE0] rounded-lg p-3 bg-[#FAFAFA] space-y-2">
+          <div className="border-t border-line pt-4 space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <label className="block text-xs font-semibold text-[#202124]">
+                <label className="block text-sm text-ink">
                   {t.photoUploadTitle}
                 </label>
-                <p className="text-[11px] text-[#5F6368]">
+                <p className="text-[11px] text-muted">
                   {t.photoUploadSubtitle}
                 </p>
               </div>
-              <span className="text-xs font-medium text-[#6D4627] bg-[#F4EFEA] px-2 py-0.5 rounded">
+              <span className="text-xs font-medium text-brand bg-brand-wash px-2 py-0.5 rounded-sm">
                 {selectedPhotos.length}/{MAX_PHOTOS_PER_KIND}
               </span>
             </div>
@@ -484,7 +482,7 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
                 <button
                   type="button"
                   onClick={() => cameraInputRef.current?.click()}
-                  className="flex items-center justify-center gap-1.5 p-2 bg-white border border-dashed border-[#6D4627] hover:bg-[#F4EFEA] text-[#6D4627] font-medium rounded text-xs transition-colors cursor-pointer"
+                  className="flex items-center justify-center gap-2 min-h-12 bg-surface border border-dashed border-brand hover:bg-brand-wash text-brand rounded-sm text-sm transition-colors cursor-pointer"
                 >
                   <Camera className="w-4 h-4" />
                   <span>{language === 'es' ? 'Tomar Foto' : 'Camera'}</span>
@@ -493,9 +491,9 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center justify-center gap-1.5 p-2 bg-white border border-dashed border-[#DADCE0] hover:bg-[#F3F3F1] text-[#202124] font-medium rounded text-xs transition-colors cursor-pointer"
+                  className="flex items-center justify-center gap-2 min-h-12 bg-surface border border-dashed border-line-strong hover:bg-wash text-ink rounded-sm text-sm transition-colors cursor-pointer"
                 >
-                  <Upload className="w-4 h-4 text-[#5F6368]" />
+                  <Upload className="w-4 h-4 text-muted" />
                   <span>{language === 'es' ? 'Seleccionar Archivos' : 'Choose Files'}</span>
                 </button>
               </div>
@@ -506,7 +504,7 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
                 {selectedPhotos.map((item, index) => (
                   <div
                     key={item.id}
-                    className="relative group border border-[#DADCE0] rounded overflow-hidden aspect-square"
+                    className="relative group border border-line rounded-sm overflow-hidden aspect-square"
                   >
                     <img
                       src={item.previewUrl}
@@ -516,10 +514,11 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
                     <button
                       type="button"
                       onClick={() => handleRemovePhoto(item.id)}
-                      className="absolute top-1 right-1 p-1 bg-[#D93025] text-white rounded-full hover:bg-red-700 transition-colors"
+                      aria-label={t.removePhoto}
+                      className="absolute top-1 right-1 inline-flex items-center justify-center w-8 h-8 bg-ink/70 text-surface rounded-sm hover:bg-danger transition-colors cursor-pointer"
                       title={t.removePhoto}
                     >
-                      <Trash2 className="w-3 h-3" />
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 ))}
@@ -527,20 +526,20 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
             )}
           </div>
 
-          {/* Modal Footer */}
-          <div className="pt-2 border-t border-[#DADCE0] flex items-center justify-end gap-2">
+          {/* Modal Footer: pinned to the bottom of the sheet, clears the home indicator */}
+          <div className="sticky bottom-0 z-20 -mx-5 -mb-5 px-5 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:pb-3 bg-surface border-t border-line flex items-center justify-end gap-2">
             <button
               type="button"
               onClick={onClose}
               disabled={isSubmitting}
-              className="px-3 py-1.5 text-xs font-medium rounded border border-[#DADCE0] text-[#5F6368] hover:bg-[#F3F3F1] cursor-pointer"
+              className="flex-1 sm:flex-none min-h-11 px-4 text-sm rounded-sm border border-line-strong text-ink hover:bg-wash cursor-pointer disabled:opacity-50"
             >
               {t.cancel}
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-4 py-1.5 text-xs sm:text-sm font-medium rounded bg-[#6D4627] hover:bg-[#55361D] text-white shadow-xs transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+              className="flex-[2] sm:flex-none min-h-11 px-5 text-sm font-medium rounded-sm bg-brand hover:bg-brand-deep text-surface transition-colors cursor-pointer disabled:opacity-50 inline-flex items-center justify-center gap-2"
             >
               {isSubmitting ? (
                 <span>{t.submitting}</span>

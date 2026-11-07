@@ -47,7 +47,7 @@ const MainLayout: React.FC = () => {
   };
 
   return (
-    <div className="h-dvh overflow-hidden bg-white flex flex-col font-sans text-[#202124]">
+    <div className="h-dvh overflow-hidden bg-paper flex flex-col font-sans text-ink">
       {/* Top Application Bar */}
       <Navbar onOpenMobileMenu={() => setIsMobileMenuOpen(true)} />
 
@@ -63,7 +63,9 @@ const MainLayout: React.FC = () => {
 
         {/* `relative` keeps absolutely-positioned descendants (e.g. sr-only labels) inside this
             scroll container; otherwise they extend the document and add phantom page scroll. */}
-        <main className="relative flex-1 min-w-0 overflow-y-auto px-3 sm:px-5 py-5 pb-16">
+        <main className="relative flex-1 min-w-0 overflow-y-auto overflow-x-hidden overscroll-contain">
+          {/* Content column. Side padding respects the notch in landscape; bottom clears the home indicator. */}
+          <div className="mx-auto w-full max-w-[1280px] pt-6 sm:pt-10 pb-[calc(4rem+env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] sm:px-8 lg:px-12">
           {currentTab === 'dashboard' && (
             <Dashboard
               onSelectTab={(tab) => setCurrentTab(tab)}
@@ -88,6 +90,7 @@ const MainLayout: React.FC = () => {
           )}
 
           {currentTab === 'users' && <UserManagementView />}
+          </div>
         </main>
       </div>
 
@@ -120,8 +123,10 @@ const MainLayout: React.FC = () => {
 
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-4 right-4 z-50 bg-[#202124] text-white px-4 py-2.5 rounded-lg shadow-xl text-xs sm:text-sm flex items-center gap-2 border border-gray-700 animate-fade-in">
-          <CheckCircle2 className="w-4 h-4 text-[#81C995] shrink-0" />
+        <div role="status"
+          aria-live="polite"
+          className="fixed z-50 left-4 right-4 bottom-[max(1rem,env(safe-area-inset-bottom))] sm:left-auto sm:right-6 sm:bottom-6 sm:max-w-md bg-ink text-surface px-4 py-3 rounded-sm text-sm flex items-start gap-2.5 animate-fade-in">
+          <CheckCircle2 className="w-4 h-4 mt-0.5 text-ok-light shrink-0" />
           <span>{toastMessage}</span>
         </div>
       )}

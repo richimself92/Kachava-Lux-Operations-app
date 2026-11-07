@@ -22,10 +22,10 @@ export const statusHelp = (t: Dict, s: RequestStatus) => t[STATUS_KEYS[s].help] 
 
 /** Badge classes per lifecycle state. */
 export const STATUS_STYLE: Record<RequestStatus, string> = {
-  sin_revisar: 'bg-[#FEF7E0] text-[#E37400] border-[#FEEFC3]',
-  pendiente: 'bg-[#F3E8FD] text-[#8430CE] border-[#E9D2FD]',
-  reconocida: 'bg-[#E8F0FE] text-[#1A73E8] border-[#D2E3FC]',
-  completada: 'bg-[#E6F4EA] text-[#137333] border-[#CEEAD6]',
+  sin_revisar: 'bg-pending-wash text-pending border-pending-line',
+  pendiente: 'bg-plum-wash text-plum border-plum-line',
+  reconocida: 'bg-info-wash text-info border-info-line',
+  completada: 'bg-ok-wash text-ok border-ok-line',
 };
 
 export const statusOptions = (t: Dict) => STATUSES.map((key) => ({ key, label: statusLabel(t, key) }));
@@ -72,10 +72,10 @@ export const priorityOptionLabel = (t: Dict, p: RequestPriority) => t[PRIORITY_K
 export const prioritySla = (t: Dict, p: RequestPriority) => t[PRIORITY_KEYS[p].sla] as string;
 
 export const PRIORITY_STYLE: Record<RequestPriority, string> = {
-  urgent: 'bg-[#FCE8E6] text-[#D93025]',
-  high: 'bg-[#FEF7E0] text-[#E37400]',
-  normal: 'bg-[#F4EFEA] text-[#6D4627]',
-  low: 'bg-[#F1F3F4] text-[#5F6368]',
+  urgent: 'bg-danger-wash text-danger',
+  high: 'bg-pending-wash text-pending',
+  normal: 'bg-brand-wash text-brand',
+  low: 'bg-wash text-muted',
 };
 
 export const priorityOptions = (t: Dict) => PRIORITIES.map((key) => ({ key, label: priorityOptionLabel(t, key) }));

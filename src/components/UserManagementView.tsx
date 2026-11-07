@@ -2,14 +2,15 @@ import React, { useEffect, useState } from 'react';
 import { AlertCircle, CheckCircle2, Loader2, ShieldAlert, UserPlus, X } from 'lucide-react';
 import { ROLES } from '../../shared/domain';
 import { useAuth } from '../context/AuthContext';
+import { btnPrimary, PageHeader } from './Kit';
 import { translations } from '../i18n/translations';
 import { addUser, InvalidEmailError, subscribeUsers, updateUser, UserExistsError } from '../services/users';
 import type { AppUser, Role } from '../types';
 
 const ROLE_BADGE: Record<Role, string> = {
-  admin: 'bg-[#6D4627] text-white',
-  supervisor: 'bg-[#989166] text-white',
-  staff: 'bg-[#F3F3F1] text-[#202124] border border-[#DADCE0]',
+  admin: 'border border-brand text-brand',
+  supervisor: 'border border-line-strong text-ink',
+  staff: 'border border-line text-muted',
 };
 
 /** Admin-only management of the approved users list (`users/{emailLower}`). */
@@ -49,7 +50,7 @@ export const UserManagementView: React.FC = () => {
 
   if (!isAdmin) {
     return (
-      <div className="p-4 bg-[#FCE8E6] border border-[#FAD2CF] rounded-lg text-sm text-[#D93025] flex items-center gap-2">
+      <div className="p-4 bg-danger-wash border border-danger-line rounded-lg text-sm text-danger flex items-center gap-2">
         <ShieldAlert className="w-4 h-4" />
         <span>{es ? 'Solo los administradores pueden gestionar usuarios.' : 'Only administrators can manage users.'}</span>
       </div>
@@ -113,32 +114,109 @@ export const UserManagementView: React.FC = () => {
   const roleLabel = (r: Role) => (r === 'admin' ? t.roleAdmin : r === 'supervisor' ? t.roleSupervisor : t.roleStaff);
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-2 border-b border-[#DADCE0]">
-        <h1 className="text-xl sm:text-2xl font-semibold text-[#202124] tracking-tight">{t.usersTitle}</h1>
-        <button
-          onClick={() => {
-            resetForm();
-            setIsAddModalOpen(true);
-          }}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#6D4627] hover:bg-[#55361D] text-white text-xs sm:text-sm font-medium rounded shadow-xs transition-colors cursor-pointer self-start sm:self-auto"
-        >
-          <UserPlus className="w-4 h-4" />
-          <span>{es ? 'Agregar usuario' : 'Add user'}</span>
-        </button>
-      </div>
+    <div className="space-y-6 sm:space-y-8">
+      <PageHeader
+        eyebrow={es ? '04 — Personal' : '04 — People'}
+        title={t.usersTitle}
+        meta={`${users.length} ${es ? 'usuarios' : 'users'}`}
+        actions={
+          <button
+            onClick={() => {
+              resetForm();
+              setIsAddModalOpen(true);
+            }}
+            className={btnPrimary}
+          >
+            <UserPlus className="w-4 h-4" strokeWidth={1.5} />
+            <span>{es ? 'Agregar usuario' : 'Add user'}</span>
+          </button>
+        }
+      />
 
       {errorText && (
-        <div className="p-2.5 bg-[#FCE8E6] border border-[#FAD2CF] rounded text-[#D93025] flex items-center gap-2 text-xs">
+        <div className="px-3.5 py-3 bg-danger-wash border-l-2 border-danger text-danger flex items-center gap-2 text-sm">
           <AlertCircle className="w-4 h-4 shrink-0" />
           <span>{errorText}</span>
         </div>
       )}
 
-      <div className="bg-white border border-[#DADCE0] rounded-lg shadow-2xs overflow-hidden">
+      {/* Phones and tablets: one block per person */}
+      <ul className="lg:hidden -mt-2 sm:-mt-4 border-b border-line divide-y divide-line">
+        {loading && (
+          <li className="py-6 text-center text-muted text-sm">
+            <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
+            {t.loading}
+          </li>
+        )}
+        {users.map((user) => {
+          const isSelf = currentUser?.email === user.email;
+          const busy = busyEmail === user.email;
+          return (
+            <li key={user.email} className={`py-4 ${user.active ? '' : 'opacity-60'}`}>
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 shrink-0 rounded-full border border-line-strong text-ink flex items-center justify-center font-display text-sm">
+                  {user.displayName.charAt(0)}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline gap-2 min-w-0">
+                    <span className="text-[15px] text-ink truncate">{user.displayName}</span>
+                    {isSelf && <span className="kl-label !text-[10px] shrink-0">{es ? 'Usted' : 'You'}</span>}
+                  </div>
+                  {user.title && <div className="text-sm text-muted truncate">{user.title}</div>}
+                  <div className="text-xs text-muted font-mono truncate">{user.email}</div>
+                  <div className="mt-1 text-xs">
+                    {user.lastSignInAt ? (
+                      <span className="text-ok">
+                        {user.lastSignInAt.toLocaleString(es ? 'es-MX' : 'en-US', {
+                          timeZone: 'America/Cancun',
+                          dateStyle: 'medium',
+                          timeStyle: 'short',
+                        })}
+                      </span>
+                    ) : (
+                      <span className="text-pending">{es ? 'Nunca ha entrado' : 'Never signed in'}</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 pl-12 flex items-center gap-3">
+                {isSelf ? (
+                  <span className="kl-label">{roleLabel(user.role)}</span>
+                ) : (
+                  <>
+                    <select
+                      value={user.role}
+                      disabled={busy}
+                      onChange={(e) => runUpdate(user.email, { role: e.target.value as Role })}
+                      className="flex-1 min-w-0 min-h-10 border border-line rounded-sm px-2.5 text-sm bg-surface cursor-pointer"
+                      aria-label={`${t.colRole} — ${user.displayName}`}
+                    >
+                      {ROLES.map((r) => (
+                        <option key={r} value={r}>
+                          {roleLabel(r)}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      disabled={busy}
+                      onClick={() => runUpdate(user.email, { active: !user.active })}
+                      className="shrink-0 min-h-10 px-3 text-sm text-ink border border-line-strong rounded-sm hover:bg-wash cursor-pointer disabled:opacity-50"
+                    >
+                      {user.active ? (es ? 'Desactivar' : 'Deactivate') : es ? 'Activar' : 'Activate'}
+                    </button>
+                  </>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+
+      {/* Desktop: table */}
+      <div className="hidden lg:block border-y border-line">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs sm:text-sm">
-            <thead className="bg-[#F3F3F1] border-b border-[#DADCE0] text-[#5F6368] uppercase text-[11px] font-semibold tracking-wider">
+          <table className="w-full text-left text-sm">
+            <thead className="border-b border-line [&_th]:kl-label [&_th]:font-medium">
               <tr>
                 <th className="px-4 py-2.5">{t.colName}</th>
                 <th className="px-4 py-2.5">{t.colTitle}</th>
@@ -148,10 +226,10 @@ export const UserManagementView: React.FC = () => {
                 <th className="px-4 py-2.5 text-right">{t.colActions}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#DADCE0]">
+            <tbody className="divide-y divide-line">
               {loading && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-[#5F6368]">
+                  <td colSpan={6} className="px-4 py-6 text-center text-muted">
                     <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
                     {t.loading}
                   </td>
@@ -161,23 +239,23 @@ export const UserManagementView: React.FC = () => {
                 const isSelf = currentUser?.email === user.email;
                 const busy = busyEmail === user.email;
                 return (
-                  <tr key={user.email} className={`transition-colors ${user.active ? 'hover:bg-[#F3F3F1]' : 'opacity-60'}`}>
-                    <td className="px-4 py-2.5 font-medium text-[#202124] whitespace-nowrap">
+                  <tr key={user.email} className={`transition-colors ${user.active ? "hover:bg-wash/60" : "opacity-60"}`}>
+                    <td className="px-4 py-2.5 font-medium text-ink whitespace-nowrap">
                       <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-[#6D4627] text-white flex items-center justify-center font-bold text-xs">
+                        <div className="w-7 h-7 rounded-full border border-line-strong text-ink flex items-center justify-center font-display text-xs">
                           {user.displayName.charAt(0)}
                         </div>
                         <span>{user.displayName}</span>
                         {isSelf && (
-                          <span className="text-[10px] bg-gray-200 text-[#5F6368] px-1 rounded font-normal">{es ? 'Usted' : 'You'}</span>
+                          <span className="text-[10px] bg-wash text-muted px-1 rounded-sm font-normal">{es ? 'Usted' : 'You'}</span>
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-2.5 text-[#5F6368] whitespace-nowrap">{user.title}</td>
-                    <td className="px-4 py-2.5 text-[#5F6368] font-mono text-xs whitespace-nowrap">{user.email}</td>
+                    <td className="px-4 py-2.5 text-muted whitespace-nowrap">{user.title}</td>
+                    <td className="px-4 py-2.5 text-muted font-mono text-xs whitespace-nowrap">{user.email}</td>
                     <td className="px-4 py-2.5 whitespace-nowrap">
                       {isSelf ? (
-                        <span className={`px-2 py-0.5 rounded-sm text-[11px] font-semibold uppercase ${ROLE_BADGE[user.role]}`}>
+                        <span className={`px-2 py-0.5 rounded-sm text-[11px] font-medium uppercase tracking-wide ${ROLE_BADGE[user.role]}`}>
                           {roleLabel(user.role)}
                         </span>
                       ) : (
@@ -185,7 +263,7 @@ export const UserManagementView: React.FC = () => {
                           value={user.role}
                           disabled={busy}
                           onChange={(e) => runUpdate(user.email, { role: e.target.value as Role })}
-                          className="border border-[#DADCE0] rounded px-1.5 py-0.5 text-xs bg-white cursor-pointer"
+                          className="min-h-9 border border-line rounded-sm px-2 text-sm bg-surface cursor-pointer"
                           aria-label={t.colRole}
                         >
                           {ROLES.map((r) => (
@@ -198,7 +276,7 @@ export const UserManagementView: React.FC = () => {
                     </td>
                     <td className="px-4 py-2.5 whitespace-nowrap text-[11px]">
                       {user.lastSignInAt ? (
-                        <span className="inline-flex items-center gap-1 text-[#137333]">
+                        <span className="inline-flex items-center gap-1 text-ok">
                           <CheckCircle2 className="w-3 h-3" />
                           {user.lastSignInAt.toLocaleString(es ? 'es-MX' : 'en-US', {
                             timeZone: 'America/Cancun',
@@ -207,7 +285,7 @@ export const UserManagementView: React.FC = () => {
                           })}
                         </span>
                       ) : (
-                        <span className="text-[#B06000]">{es ? 'Nunca' : 'Never'}</span>
+                        <span className="text-pending">{es ? 'Nunca' : 'Never'}</span>
                       )}
                     </td>
                     <td className="px-4 py-2.5 text-right whitespace-nowrap">
@@ -215,7 +293,7 @@ export const UserManagementView: React.FC = () => {
                         <button
                           disabled={busy}
                           onClick={() => runUpdate(user.email, { active: !user.active })}
-                          className="text-xs text-[#6D4627] hover:underline font-medium cursor-pointer disabled:opacity-50"
+                          className="text-xs text-brand hover:underline font-medium cursor-pointer disabled:opacity-50"
                         >
                           {user.active ? (es ? 'Desactivar' : 'Deactivate') : es ? 'Activar' : 'Activate'}
                         </button>
@@ -229,9 +307,9 @@ export const UserManagementView: React.FC = () => {
         </div>
       </div>
 
-      <div className="p-3 bg-[#F4EFEA] border border-[#E8DEC9] rounded-lg text-xs text-[#202124] flex items-start gap-2.5">
-        <ShieldAlert className="w-4 h-4 text-[#6D4627] shrink-0 mt-0.5" />
-        <div className="text-[#5F6368] text-[11px] leading-relaxed">
+      <div className="pt-4 border-t border-line text-xs text-ink flex items-start gap-2.5 max-w-2xl">
+        <ShieldAlert className="w-4 h-4 text-brand shrink-0 mt-0.5" />
+        <div className="text-muted text-xs leading-relaxed">
           {es
             ? 'Solo las personas en esta lista (cuenta Microsoft @kachavalux.com) pueden entrar. Desactivar a un usuario bloquea su acceso de inmediato. El rol define los permisos; el puesto es solo informativo.'
             : 'Only people on this list (Microsoft @kachavalux.com account) can sign in. Deactivating a user blocks access immediately. Role defines permissions; job title is informational only.'}
@@ -239,52 +317,52 @@ export const UserManagementView: React.FC = () => {
       </div>
 
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-2xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full border border-[#DADCE0] p-4">
-            <div className="flex items-center justify-between pb-2.5 border-b border-[#DADCE0] mb-3">
-              <h3 className="font-semibold text-sm text-[#202124]">{es ? 'Agregar usuario aprobado' : 'Add approved user'}</h3>
-              <button onClick={() => setIsAddModalOpen(false)} className="p-1 text-[#5F6368] hover:text-[#202124] rounded cursor-pointer">
+        <div className="fixed inset-0 z-50 bg-ink/40 flex items-end sm:items-center justify-center sm:p-4 animate-fade-in" role="dialog" aria-modal="true">
+          <div className="bg-surface w-full sm:max-w-md border-t sm:border border-line rounded-none sm:rounded-sm p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:pb-5 max-h-[90dvh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-2.5 border-b border-line mb-3">
+              <h3 className="font-semibold text-sm text-ink">{es ? 'Agregar usuario aprobado' : 'Add approved user'}</h3>
+              <button onClick={() => setIsAddModalOpen(false)} className="p-1 text-muted hover:text-ink rounded-sm cursor-pointer">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <form onSubmit={handleAddSubmit} className="space-y-3 text-xs">
               {addError && (
-                <div className="p-2 bg-[#FCE8E6] border border-[#FAD2CF] rounded text-[#D93025] flex items-center gap-2">
+                <div className="p-2 bg-danger-wash border border-danger-line rounded-sm text-danger flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 shrink-0" />
                   <span>{addError}</span>
                 </div>
               )}
               <label className="block">
-                <span className="block font-medium text-[#202124] mb-1">
-                  {t.colName} <span className="text-[#D93025]">*</span>
+                <span className="block font-medium text-ink mb-1">
+                  {t.colName} <span className="text-danger">*</span>
                 </span>
-                <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} className="w-full border border-[#DADCE0] rounded p-2 text-sm" required />
+                <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} className="w-full border border-line rounded-sm p-2 text-sm" required />
               </label>
               <label className="block">
-                <span className="block font-medium text-[#202124] mb-1">
-                  {t.colEmail} <span className="text-[#D93025]">*</span>
+                <span className="block font-medium text-ink mb-1">
+                  {t.colEmail} <span className="text-danger">*</span>
                 </span>
                 <input
                   type="email"
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
                   placeholder="name@kachavalux.com"
-                  className="w-full border border-[#DADCE0] rounded p-2 text-sm"
+                  className="w-full border border-line rounded-sm p-2 text-sm"
                   required
                 />
               </label>
               <label className="block">
-                <span className="block font-medium text-[#202124] mb-1">
-                  {t.colTitle} <span className="text-[#D93025]">*</span>
+                <span className="block font-medium text-ink mb-1">
+                  {t.colTitle} <span className="text-danger">*</span>
                 </span>
-                <input type="text" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} className="w-full border border-[#DADCE0] rounded p-2 text-sm" required />
+                <input type="text" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} className="w-full border border-line rounded-sm p-2 text-sm" required />
               </label>
               <label className="block">
-                <span className="block font-medium text-[#202124] mb-1">
-                  {t.colRole} <span className="text-[#D93025]">*</span>
+                <span className="block font-medium text-ink mb-1">
+                  {t.colRole} <span className="text-danger">*</span>
                 </span>
-                <select value={newRole} onChange={(e) => setNewRole(e.target.value as Role)} className="w-full border border-[#DADCE0] rounded p-2 text-sm">
+                <select value={newRole} onChange={(e) => setNewRole(e.target.value as Role)} className="w-full border border-line rounded-sm p-2 text-sm">
                   {ROLES.map((r) => (
                     <option key={r} value={r}>
                       {roleLabel(r)}
@@ -292,14 +370,14 @@ export const UserManagementView: React.FC = () => {
                   ))}
                 </select>
               </label>
-              <div className="pt-2 border-t border-[#DADCE0] flex justify-end gap-2">
-                <button type="button" onClick={() => setIsAddModalOpen(false)} className="px-3 py-1.5 border rounded text-[#5F6368] hover:bg-gray-100 cursor-pointer">
+              <div className="pt-2 border-t border-line flex justify-end gap-2">
+                <button type="button" onClick={() => setIsAddModalOpen(false)} className="px-3 py-1.5 border rounded-sm text-muted hover:bg-gray-100 cursor-pointer">
                   {t.cancel}
                 </button>
                 <button
                   type="submit"
                   disabled={adding}
-                  className="px-4 py-1.5 bg-[#6D4627] hover:bg-[#55361D] text-white rounded font-medium cursor-pointer disabled:opacity-60"
+                  className="px-4 py-1.5 bg-brand hover:bg-brand-deep text-surface rounded-sm font-medium cursor-pointer disabled:opacity-60"
                 >
                   {adding ? <Loader2 className="w-4 h-4 animate-spin" /> : t.save}
                 </button>

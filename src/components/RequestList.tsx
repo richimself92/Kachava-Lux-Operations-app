@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { AlertCircle, AlertTriangle, Camera, CalendarDays, ExternalLink, Loader2, Pencil, RotateCcw, Search, Trash2, User, X } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Camera, CalendarDays, ExternalLink, Loader2, Pencil, Plus, RotateCcw, Search, Trash2, User, X } from 'lucide-react';
 import { isResponseOverdue, isSupervisorRole } from '../../shared/domain';
 import { useAuth } from '../context/AuthContext';
 import { useRequests } from '../context/RequestContext';
@@ -22,6 +22,7 @@ import { richTextToPlain } from '../lib/richText';
 import { cancunDateKey, formatCancunDate, formatCancunDateTime, formatCancunShort, formatDateKey } from '../lib/time';
 import { ConfirmDialog } from './ConfirmDialog';
 import { DatePickerPopover } from './DatePickerPopover';
+import { btnPrimary, PageHeader, Segmented } from './Kit';
 import { EditRequestDialog } from './EditRequestDialog';
 import type { FilterOptions, MaintenanceRequest, TimeFilter } from '../types';
 
@@ -87,8 +88,8 @@ export const RequestList: React.FC<RequestListProps> = ({ onSelectRequest, onOpe
     req.status === 'sin_revisar' && isResponseOverdue(req.createdAt.getTime(), req.priority, now.getTime());
 
   const selectClass =
-    'w-full bg-white border border-[#DADCE0] rounded-md px-2 py-1.5 text-xs text-[#202124] focus:outline-hidden focus:border-[#1A73E8]';
-  const labelClass = 'block text-[10px] font-semibold text-[#5F6368] uppercase mb-1';
+    'w-full min-h-10 bg-surface border border-line rounded-sm px-2.5 text-sm text-ink focus:outline-hidden focus:border-ink cursor-pointer';
+  const labelClass = 'kl-label block mb-1.5';
 
   const emptyState = loading ? (
     <span className="inline-flex items-center gap-2">
@@ -96,17 +97,17 @@ export const RequestList: React.FC<RequestListProps> = ({ onSelectRequest, onOpe
       {t.loading}
     </span>
   ) : loadError ? (
-    <span className="text-[#D93025]">{es ? 'No se pudieron cargar las solicitudes.' : 'Could not load requests.'}</span>
+    <span className="text-danger">{es ? 'No se pudieron cargar las solicitudes.' : 'Could not load requests.'}</span>
   ) : (
     t.noDataYet
   );
 
   const ticketCell = (req: MaintenanceRequest) => (
-    <span className={req.ticketId ? '' : 'italic text-[#70757A] font-normal'}>{ticketLabel(t, req)}</span>
+    <span className={req.ticketId ? '' : 'italic text-muted font-normal'}>{ticketLabel(t, req)}</span>
   );
 
   const overdueBadge = (
-    <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-[#D93025]" title={t.timerOverdue}>
+    <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-danger" title={t.timerOverdue}>
       <AlertTriangle className="w-3 h-3" />
       {t.timerOverdue}
     </span>
@@ -114,42 +115,42 @@ export const RequestList: React.FC<RequestListProps> = ({ onSelectRequest, onOpe
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-2 border-b border-[#DADCE0]">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-semibold text-[#202124] tracking-tight">{t.navRequests}</h1>
-          <p className="text-xs text-[#5F6368]">
+      <PageHeader
+        eyebrow={es ? '02 — Órdenes' : '02 — Work orders'}
+        title={t.navRequests}
+        meta={
+          <>
             {t.filteredResultsCount.replace('{count}', String(filteredRequests.length)).replace('{total}', String(requests.length))}
-            {!isSupervisor && <span className="ml-1 text-[#6D4627] font-medium">({es ? 'Tus solicitudes' : 'Your submissions'})</span>}
-          </p>
-        </div>
-        <button
-          onClick={onOpenNewRequest}
-          className="self-start sm:self-auto flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md bg-[#6D4627] hover:bg-[#55361D] text-white transition-colors cursor-pointer shadow-xs"
-        >
-          <span>+ {t.navNewRequest}</span>
-        </button>
-      </div>
+            {!isSupervisor && <span className="ml-1 text-brand">({es ? 'Tus solicitudes' : 'Your submissions'})</span>}
+          </>
+        }
+        actions={
+          <button onClick={onOpenNewRequest} className={btnPrimary}>
+            <Plus className="w-4 h-4" />
+            {t.navNewRequest}
+          </button>
+        }
+      />
 
       {/* Filters */}
-      <div className="bg-[#F3F3F1] p-3 rounded-lg border border-[#DADCE0] space-y-2.5">
-        <div className="flex flex-col md:flex-row gap-2">
+      <div className="space-y-4">
+        <div className="flex flex-col lg:flex-row lg:items-end gap-3 lg:gap-6">
           <div className="relative flex-1">
-            <Search className="w-4 h-4 absolute left-3 top-2.5 text-[#5F6368]" />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" strokeWidth={1.5} />
             <input
-              type="text"
+              type="search"
               value={filterOptions.searchQuery}
               onChange={(e) => setFilter('searchQuery', e.target.value)}
               placeholder={t.searchPlaceholder}
-              className="w-full pl-9 pr-3 py-1.5 bg-white border border-[#DADCE0] rounded-md text-xs sm:text-sm focus:outline-hidden focus:border-[#1A73E8]"
+              aria-label={t.searchPlaceholder}
+              className="w-full min-h-11 pl-9 pr-3 bg-surface border border-line rounded-sm text-sm focus:outline-hidden focus:border-ink transition-colors"
             />
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-end gap-3 min-w-0">
           <div className="relative shrink-0">
             <div
-              className={`flex items-center rounded-md text-xs font-medium whitespace-nowrap transition-colors ${
-                selectedDay
-                  ? 'bg-[#6D4627] text-white font-semibold'
-                  : 'bg-white border border-[#DADCE0] text-[#5F6368] hover:text-[#202124]'
+              className={`flex items-center min-h-10 rounded-sm text-sm whitespace-nowrap transition-colors border ${
+                selectedDay ? 'border-ink text-ink bg-surface' : 'border-line text-muted hover:text-ink bg-surface'
               }`}
             >
               <button
@@ -157,9 +158,9 @@ export const RequestList: React.FC<RequestListProps> = ({ onSelectRequest, onOpe
                 onClick={() => setDatePickerOpen((v) => !v)}
                 aria-haspopup="dialog"
                 aria-expanded={datePickerOpen}
-                className="flex items-center gap-1 px-2.5 py-1 cursor-pointer"
+                className="flex items-center gap-1.5 min-h-10 px-3 cursor-pointer"
               >
-                <CalendarDays className="w-3.5 h-3.5" />
+                <CalendarDays className="w-4 h-4" strokeWidth={1.5} />
                 {selectedDay ? formatDateKey(selectedDay, language) : t.filterDate}
               </button>
               {selectedDay && (
@@ -168,9 +169,9 @@ export const RequestList: React.FC<RequestListProps> = ({ onSelectRequest, onOpe
                   onClick={() => setFilter('createdOn', null)}
                   title={t.clearDate}
                   aria-label={t.clearDate}
-                  className="pr-1.5 pl-0.5 py-1 cursor-pointer opacity-80 hover:opacity-100"
+                  className="flex items-center min-h-10 pr-2.5 pl-0.5 cursor-pointer text-muted hover:text-ink"
                 >
-                  <X className="w-3.5 h-3.5" />
+                  <X className="w-4 h-4" />
                 </button>
               )}
             </div>
@@ -188,25 +189,17 @@ export const RequestList: React.FC<RequestListProps> = ({ onSelectRequest, onOpe
               />
             )}
           </div>
-          <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
-            {timeFilters.map((tf) => (
-              <button
-                key={tf.key}
-                onClick={() => setFilterOptions((prev) => ({ ...prev, timeFilter: tf.key, createdOn: null }))}
-                className={`px-2.5 py-1 text-xs font-medium rounded-md whitespace-nowrap transition-colors cursor-pointer ${
-                  !selectedDay && filterOptions.timeFilter === tf.key
-                    ? 'bg-[#6D4627] text-white font-semibold'
-                    : 'bg-white border border-[#DADCE0] text-[#5F6368] hover:text-[#202124]'
-                }`}
-              >
-                {tf.label}
-              </button>
-            ))}
-          </div>
+          <Segmented
+            label={es ? 'Periodo' : 'Period'}
+            options={timeFilters}
+            value={selectedDay ? null : filterOptions.timeFilter}
+            onChange={(key) => setFilterOptions((prev) => ({ ...prev, timeFilter: key, createdOn: null }))}
+            className="flex-1 min-w-0 !ml-0 !pl-1 sm:!pl-0"
+          />
           </div>
         </div>
 
-        <div className={`grid grid-cols-2 sm:grid-cols-4 ${isSupervisor ? 'lg:grid-cols-5' : ''} gap-2 text-xs`}>
+        <div className={`grid grid-cols-2 sm:grid-cols-4 ${isSupervisor ? 'lg:grid-cols-5' : ''} gap-x-3 gap-y-3 pt-4 border-t border-line`}>
           <div>
             <label className={labelClass}>{t.filterVilla}</label>
             <select value={filterOptions.locationCode} onChange={(e) => setFilter('locationCode', e.target.value)} className={selectClass}>
@@ -294,7 +287,8 @@ export const RequestList: React.FC<RequestListProps> = ({ onSelectRequest, onOpe
             <button
               onClick={resetFilters}
               title={t.clearFilters}
-              className="px-2 py-1.5 bg-white border border-[#DADCE0] hover:bg-gray-100 rounded-md text-[#5F6368] cursor-pointer"
+              aria-label={t.clearFilters}
+              className="inline-flex items-center justify-center w-10 h-10 shrink-0 bg-surface border border-line hover:bg-wash hover:text-ink rounded-sm text-muted cursor-pointer"
             >
               <RotateCcw className="w-4 h-4" />
             </button>
@@ -303,9 +297,9 @@ export const RequestList: React.FC<RequestListProps> = ({ onSelectRequest, onOpe
       </div>
 
       {/* Desktop table */}
-      <div className="hidden md:block bg-white border border-[#DADCE0] rounded-lg shadow-2xs overflow-x-auto">
-        <table className="w-full text-left text-xs sm:text-sm">
-          <thead className="bg-[#F3F3F1] border-b border-[#DADCE0] text-[#5F6368] uppercase text-[11px] font-semibold tracking-wider">
+      <div className="hidden xl:block border-y border-line overflow-x-auto">
+        <table className="w-full text-left text-sm">
+          <thead className="border-b border-line [&_th]:kl-label [&_th]:font-medium">
             <tr>
               <th className="px-3 py-2.5">{t.ticketIdLabel}</th>
               <th className="px-3 py-2.5">{t.filterVilla}</th>
@@ -323,11 +317,11 @@ export const RequestList: React.FC<RequestListProps> = ({ onSelectRequest, onOpe
               )}
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#DADCE0]">
+          <tbody className="divide-y divide-line">
             {filteredRequests.length === 0 ? (
               <tr>
-                <td colSpan={isSupervisor ? 10 : 9} className="px-4 py-10 text-center text-[#5F6368]">
-                  <AlertCircle className="w-7 h-7 text-[#989166] mx-auto mb-1.5" />
+                <td colSpan={isSupervisor ? 10 : 9} className="px-4 py-10 text-center text-muted">
+                  <AlertCircle className="w-7 h-7 text-muted mx-auto mb-1.5" />
                   <div className="font-medium text-sm">{emptyState}</div>
                 </td>
               </tr>
@@ -338,26 +332,26 @@ export const RequestList: React.FC<RequestListProps> = ({ onSelectRequest, onOpe
                   <tr
                     key={req.id}
                     onClick={() => onSelectRequest(req)}
-                    className={`hover:bg-[#F3F3F1] cursor-pointer transition-colors group ${overdue(req) ? 'bg-[#FCE8E6]/40' : ''}`}
+                    className={`hover:bg-wash/60 cursor-pointer transition-colors group ${overdue(req) ? "bg-danger-wash/40" : ""}`}
                   >
-                    <td className="px-3 py-2.5 font-semibold text-[#202124] whitespace-nowrap group-hover:text-[#6D4627]">
+                    <td className="px-3 py-3 text-ink whitespace-nowrap tabular-nums group-hover:text-brand">
                       <span className="flex items-center gap-1.5">
                         {ticketCell(req)}
-                        <ExternalLink className="w-3 h-3 text-[#5F6368] opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <ExternalLink className="w-3 h-3 text-muted opacity-0 group-hover:opacity-100 transition-opacity" />
                       </span>
                     </td>
-                    <td className="px-3 py-2.5 font-bold text-[#6D4627] whitespace-nowrap">
+                    <td className="px-3 py-3 text-brand whitespace-nowrap">
                       {locationLabel(t, req.location.code, req.location.name)}
                     </td>
-                    <td className="px-3 py-2.5 text-[#202124] whitespace-nowrap">{requestCategoryLabel(t, req)}</td>
+                    <td className="px-3 py-2.5 text-ink whitespace-nowrap">{requestCategoryLabel(t, req)}</td>
                     <td className="px-3 py-2.5 whitespace-nowrap">
-                      <span className={`px-2 py-0.5 rounded-sm text-[11px] font-semibold uppercase ${PRIORITY_STYLE[req.priority]}`}>
+                      <span className={`px-1.5 py-0.5 rounded-sm text-[11px] font-medium uppercase tracking-wide ${PRIORITY_STYLE[req.priority]}`}>
                         {priorityBadge(t, req.priority)}
                       </span>
                     </td>
                     <td className="px-3 py-2.5 whitespace-nowrap">
                       <div className="flex flex-col items-start gap-0.5">
-                        <span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${STATUS_STYLE[req.status]}`} title={statusHelp(t, req.status)}>
+                        <span className={`px-2 py-0.5 rounded-sm text-[11px] font-medium border ${STATUS_STYLE[req.status]}`} title={statusHelp(t, req.status)}>
                           {statusLabel(t, req.status)}
                         </span>
                         {overdue(req) && overdueBadge}
@@ -365,28 +359,28 @@ export const RequestList: React.FC<RequestListProps> = ({ onSelectRequest, onOpe
                     </td>
                     <td className="px-3 py-3 text-center whitespace-nowrap">
                       {totalPhotos > 0 ? (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#F3F3F1] text-[#202124] text-[11px] font-medium border border-[#DADCE0]">
-                          <Camera className="w-3 h-3 text-[#6D4627]" />
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm bg-wash text-ink text-[11px] font-medium border border-line">
+                          <Camera className="w-3 h-3 text-brand" />
                           <span>{req.beforePhotos.length}</span>
-                          {req.afterPhotos.length > 0 && <span className="text-[10px] text-[#137333] font-bold">(+{req.afterPhotos.length})</span>}
+                          {req.afterPhotos.length > 0 && <span className="text-[10px] text-ok font-medium">(+{req.afterPhotos.length})</span>}
                         </span>
                       ) : (
-                        <span className="text-[#BDC1C6] text-xs">—</span>
+                        <span className="text-line-strong text-xs">—</span>
                       )}
                     </td>
-                    <td className="px-3 py-2.5 text-[#5F6368] whitespace-nowrap">{req.submittedBy.name}</td>
-                    <td className="px-3 py-2.5 text-[#5F6368] whitespace-nowrap">
-                      {req.assignedTo?.name ?? <span className="italic text-[#70757A]">{t.notAssignedYet}</span>}
+                    <td className="px-3 py-2.5 text-muted whitespace-nowrap">{req.submittedBy.name}</td>
+                    <td className="px-3 py-2.5 text-muted whitespace-nowrap">
+                      {req.assignedTo?.name ?? <span className="italic text-muted">{t.notAssignedYet}</span>}
                     </td>
                     <td
-                      className="px-3 py-2.5 text-[#5F6368] text-right whitespace-nowrap tabular-nums text-xs"
+                      className="px-3 py-2.5 text-muted text-right whitespace-nowrap tabular-nums text-xs"
                       title={formatCancunDateTime(req.createdAt, language)}
                     >
                       {formatCancunShort(req.createdAt, language)}
                     </td>
                     {isSupervisor && (
                       <td className="w-20 pl-1 pr-2 py-1.5 text-right whitespace-nowrap">
-                        <div className="inline-flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                        <div className="inline-flex items-center gap-0.5 opacity-50 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                           {canEdit(req) && (
                             <button
                               type="button"
@@ -396,7 +390,7 @@ export const RequestList: React.FC<RequestListProps> = ({ onSelectRequest, onOpe
                               }}
                               title={t.editRequest}
                               aria-label={`${t.editRequest} ${ticketLabel(t, req)}`}
-                              className="p-1.5 rounded-md text-[#5F6368] hover:text-[#6D4627] hover:bg-[#F4EFEA] cursor-pointer"
+                              className="inline-flex items-center justify-center w-9 h-9 rounded-sm text-muted hover:text-brand hover:bg-brand-wash cursor-pointer"
                             >
                               <Pencil className="w-4 h-4" />
                             </button>
@@ -411,7 +405,7 @@ export const RequestList: React.FC<RequestListProps> = ({ onSelectRequest, onOpe
                               }}
                               title={t.deleteRequest}
                               aria-label={`${t.deleteRequest} ${ticketLabel(t, req)}`}
-                              className="p-1.5 rounded-md text-[#5F6368] hover:text-[#D93025] hover:bg-[#FCE8E6] cursor-pointer"
+                              className="inline-flex items-center justify-center w-9 h-9 rounded-sm text-muted hover:text-danger hover:bg-danger-wash cursor-pointer"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -427,59 +421,95 @@ export const RequestList: React.FC<RequestListProps> = ({ onSelectRequest, onOpe
         </table>
       </div>
 
-      {/* Mobile cards */}
-      <div className="md:hidden space-y-2.5">
+      {/* Phones, tablets and small laptops: cards (1 column, 2 from 640px). */}
+      <div className="xl:hidden">
         {filteredRequests.length === 0 ? (
-          <div className="bg-white border border-[#DADCE0] p-6 text-center rounded-lg text-[#5F6368]">
-            <AlertCircle className="w-6 h-6 text-[#989166] mx-auto mb-1" />
-            <div className="font-medium text-xs">{emptyState}</div>
+          <div className="border-y border-line py-10 text-center text-muted">
+            <AlertCircle className="w-6 h-6 mx-auto mb-2" strokeWidth={1.5} />
+            <div className="text-sm">{emptyState}</div>
           </div>
         ) : (
-          filteredRequests.map((req) => (
-            <div
-              key={req.id}
-              onClick={() => onSelectRequest(req)}
-              className={`bg-white border rounded-lg p-3 shadow-2xs space-y-1.5 cursor-pointer active:bg-gray-50 transition-colors ${
-                overdue(req) ? 'border-[#D93025]' : 'border-[#DADCE0]'
-              }`}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-semibold text-xs text-[#202124]">{ticketCell(req)}</span>
-                <div className="flex items-center gap-1.5">
-                  {overdue(req) && overdueBadge}
-                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium border ${STATUS_STYLE[req.status]}`}>
-                    {statusLabel(t, req.status)}
-                  </span>
-                  <span className={`text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded ${PRIORITY_STYLE[req.priority]}`}>
-                    {priorityBadge(t, req.priority)}
-                  </span>
-                </div>
-              </div>
-              <div className="flex items-baseline justify-between text-xs">
-                <div className="font-bold text-[#6D4627]">{locationLabel(t, req.location.code, req.location.name)}</div>
-                <div className="text-[#5F6368]">{requestCategoryLabel(t, req)}</div>
-              </div>
-              <div className="text-xs text-[#5F6368] line-clamp-2">
-                {req.locationDetail && <span className="font-medium text-[#202124]">{req.locationDetail}: </span>}
-                {richTextToPlain(req.notes)}
-              </div>
-              <div className="pt-1.5 border-t border-[#DADCE0] flex items-center justify-between text-[11px] text-[#5F6368]">
-                <div className="flex items-center gap-1">
-                  <User className="w-3 h-3" />
-                  <span>{req.submittedBy.name}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {req.beforePhotos.length + req.afterPhotos.length > 0 && (
-                    <span className="flex items-center gap-0.5 font-medium text-[#202124]">
-                      <Camera className="w-3 h-3 text-[#6D4627]" />
-                      <span>{req.beforePhotos.length + req.afterPhotos.length}</span>
-                    </span>
+          <ul className="grid sm:grid-cols-2 gap-px bg-line border border-line sm:[&>li:last-child:nth-child(odd)]:col-span-2">
+            {filteredRequests.map((req) => {
+              const photos = req.beforePhotos.length + req.afterPhotos.length;
+              const showActions = canEdit(req) || canDelete;
+              return (
+                <li key={req.id} className="bg-surface flex flex-col min-w-0">
+                  {overdue(req) && <span className="block h-0.5 bg-danger" aria-hidden />}
+                  <button
+                    type="button"
+                    onClick={() => onSelectRequest(req)}
+                    className="flex-1 text-left p-4 space-y-2 active:bg-wash hover:bg-wash/50 transition-colors cursor-pointer min-w-0"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="text-sm text-ink tabular-nums pt-0.5">{ticketCell(req)}</span>
+                      <span className="flex flex-wrap items-center justify-end gap-1.5">
+                        <span className={`text-[10px] uppercase tracking-wide font-medium px-1.5 py-0.5 rounded-sm ${PRIORITY_STYLE[req.priority]}`}>
+                          {priorityBadge(t, req.priority)}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded-sm text-[11px] font-medium border ${STATUS_STYLE[req.status]}`}>
+                          {statusLabel(t, req.status)}
+                        </span>
+                      </span>
+                    </div>
+                    <div className="text-sm min-w-0">
+                      <span className="text-brand">{locationLabel(t, req.location.code, req.location.name)}</span>
+                      <span className="text-muted"> · {requestCategoryLabel(t, req)}</span>
+                    </div>
+                    <p className="text-sm text-muted line-clamp-2 break-words">
+                      {req.locationDetail && <span className="text-ink">{req.locationDetail}: </span>}
+                      {richTextToPlain(req.notes)}
+                    </p>
+                    <div className="pt-2 flex items-center justify-between gap-3 text-xs text-muted">
+                      <span className="flex items-center gap-1.5 min-w-0">
+                        <User className="w-3.5 h-3.5 shrink-0" strokeWidth={1.5} />
+                        <span className="truncate">{req.submittedBy.name}</span>
+                      </span>
+                      <span className="flex items-center gap-3 shrink-0">
+                        {overdue(req) && overdueBadge}
+                        {photos > 0 && (
+                          <span className="flex items-center gap-1 text-ink">
+                            <Camera className="w-3.5 h-3.5" strokeWidth={1.5} />
+                            {photos}
+                          </span>
+                        )}
+                        <span className="tabular-nums">{formatCancunShort(req.createdAt, language)}</span>
+                      </span>
+                    </div>
+                  </button>
+                  {isSupervisor && showActions && (
+                    <div className="flex border-t border-line divide-x divide-line">
+                      {canEdit(req) && (
+                        <button
+                          type="button"
+                          onClick={() => setEditing(req)}
+                          aria-label={`${t.editRequest} ${ticketLabel(t, req)}`}
+                          className="flex-1 inline-flex items-center justify-center gap-2 min-h-11 text-sm text-muted hover:text-ink hover:bg-wash transition-colors cursor-pointer"
+                        >
+                          <Pencil className="w-4 h-4" strokeWidth={1.5} />
+                          {t.editRequest}
+                        </button>
+                      )}
+                      {canDelete && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDeleteError(null);
+                            setPendingDelete(req);
+                          }}
+                          aria-label={`${t.deleteRequest} ${ticketLabel(t, req)}`}
+                          className="flex-1 inline-flex items-center justify-center gap-2 min-h-11 text-sm text-muted hover:text-danger hover:bg-danger-wash transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" strokeWidth={1.5} />
+                          {t.deleteRequest}
+                        </button>
+                      )}
+                    </div>
                   )}
-                  <span className="font-mono">{formatCancunDate(req.createdAt, language)}</span>
-                </div>
-              </div>
-            </div>
-          ))
+                </li>
+              );
+            })}
+          </ul>
         )}
       </div>
 

@@ -3,7 +3,6 @@ import {
   AlertCircle,
   Camera,
   CheckCircle2,
-  History,
   Lock,
   MessageSquarePlus,
   PauseCircle,
@@ -114,20 +113,20 @@ const PhotoPicker: React.FC<{
               <button
                 type="button"
                 onClick={() => cameraRef.current?.click()}
-                className="px-2.5 py-1 bg-[#F3F3F1] hover:bg-[#E9E9E6] border border-[#DADCE0] rounded text-xs font-medium flex items-center gap-1 cursor-pointer"
+                className="min-h-10 px-3 bg-surface hover:bg-wash border border-line-strong rounded-sm text-sm flex items-center gap-1.5 cursor-pointer"
               >
-                <Camera className="w-3.5 h-3.5 text-[#6D4627]" />
+                <Camera className="w-3.5 h-3.5 text-brand" />
                 <span>{es ? 'Cámara' : 'Camera'}</span>
               </button>
               <button
                 type="button"
                 onClick={() => fileRef.current?.click()}
-                className="px-2.5 py-1 bg-[#F3F3F1] hover:bg-[#E9E9E6] border border-[#DADCE0] rounded text-xs font-medium flex items-center gap-1 cursor-pointer"
+                className="min-h-10 px-3 bg-surface hover:bg-wash border border-line-strong rounded-sm text-sm flex items-center gap-1.5 cursor-pointer"
               >
-                <Upload className="w-3.5 h-3.5 text-[#5F6368]" />
+                <Upload className="w-3.5 h-3.5 text-muted" />
                 <span>{es ? 'Archivos' : 'Files'}</span>
               </button>
-              <span className="text-[11px] text-[#5F6368]">
+              <span className="text-[11px] text-muted">
                 {files.length}/{maxFiles}
               </span>
             </>
@@ -137,12 +136,12 @@ const PhotoPicker: React.FC<{
       {files.length > 0 && (
         <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
           {files.map((item) => (
-            <div key={item.id} className="relative border border-[#DADCE0] rounded overflow-hidden aspect-square">
+            <div key={item.id} className="relative border border-line rounded-sm overflow-hidden aspect-square">
               <img src={item.previewUrl} alt={item.file.name} className="w-full h-full object-cover" />
               <button
                 type="button"
                 onClick={() => remove(item.id)}
-                className="absolute top-1 right-1 p-1 bg-[#D93025] text-white rounded-full hover:bg-red-700"
+                className="absolute top-1 right-1 inline-flex items-center justify-center w-8 h-8 bg-ink/70 text-surface rounded-sm hover:bg-danger cursor-pointer"
                 title={t.removePhoto}
               >
                 <Trash2 className="w-3 h-3" />
@@ -161,7 +160,7 @@ const PhotoGrid: React.FC<{ photos: PhotoAttachment[]; onOpen: (p: PhotoAttachme
   emptyText,
 }) =>
   photos.length === 0 ? (
-    <div className="text-xs text-[#70757A] italic py-1">{emptyText}</div>
+    <div className="text-xs text-muted italic py-1">{emptyText}</div>
   ) : (
     <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
       {photos.map((p) => (
@@ -294,81 +293,91 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
   ];
 
   const attr = (label: string, value: React.ReactNode) => (
-    <div className="bg-white border border-[#DADCE0] p-2.5 rounded">
-      <span className="text-[#5F6368] text-[10px] uppercase font-semibold block">{label}</span>
-      <div className="font-medium text-[#202124] mt-0.5">{value}</div>
+    <div className="min-w-0 py-3 border-t border-line">
+      <span className="kl-label block">{label}</span>
+      <div className="text-ink mt-1 break-words">{value}</div>
     </div>
   );
 
   return (
     <>
-      <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-2xs flex items-center justify-center p-3 sm:p-6 print:p-0 print:bg-white">
-        <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full border border-[#DADCE0] overflow-hidden my-auto max-h-[94vh] flex flex-col print:border-none print:shadow-none print:max-w-full print:max-h-none">
+      <div className="fixed inset-0 z-50 bg-ink/40 flex items-stretch sm:items-center justify-center sm:p-6 animate-fade-in print:p-0 print:bg-surface" role="dialog" aria-modal="true">
+        <div className="bg-surface w-full sm:max-w-3xl h-dvh sm:h-auto sm:max-h-[92dvh] flex flex-col overflow-hidden sm:border sm:border-line rounded-none sm:rounded-sm print:border-none print:max-w-full print:max-h-none print:h-auto">
           {/* Header */}
-          <div className="px-5 py-3.5 border-b border-[#DADCE0] flex items-center justify-between bg-[#FAFAFA] print:bg-white">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className={`font-mono text-base sm:text-lg font-bold ${request.ticketId ? 'text-[#202124]' : 'text-[#70757A] italic'}`}>
-                {ticketLabel(t, request)}
-              </span>
-              <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${STATUS_STYLE[request.status]}`} title={statusHelp(t, request.status)}>
-                {statusLabel(t, request.status)}
-              </span>
-              <span className="px-2 py-0.5 rounded text-xs font-bold uppercase bg-[#F4EFEA] text-[#6D4627]">
-                {locationLabel(t, request.location.code, request.location.name)}
-              </span>
+          <div className="shrink-0 border-b border-line pl-5 pr-2 sm:pr-3 pt-[calc(0.75rem+env(safe-area-inset-top))] sm:pt-4 pb-3 flex items-start justify-between gap-3 print:bg-surface">
+            <div className="min-w-0">
+              <div className="kl-label truncate">{locationLabel(t, request.location.code, request.location.name)}</div>
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                <span className={`font-display text-xl sm:text-2xl tabular-nums ${request.ticketId ? 'text-ink' : 'text-muted italic'}`}>
+                  {ticketLabel(t, request)}
+                </span>
+                <span className={`px-2 py-0.5 rounded-sm text-[11px] font-medium border ${STATUS_STYLE[request.status]}`} title={statusHelp(t, request.status)}>
+                  {statusLabel(t, request.status)}
+                </span>
+              </div>
             </div>
-            <div className="flex items-center gap-1.5 print:hidden">
-              <button onClick={() => window.print()} className="p-1.5 text-[#5F6368] hover:text-[#202124] hover:bg-[#F3F3F1] rounded cursor-pointer" title={t.print}>
-                <Printer className="w-4 h-4" />
+            <div className="flex items-center print:hidden -mt-1">
+              <button
+                onClick={() => window.print()}
+                className="hidden sm:inline-flex items-center justify-center w-10 h-10 text-muted hover:text-ink hover:bg-wash rounded-sm cursor-pointer"
+                title={t.print}
+                aria-label={t.print}
+              >
+                <Printer className="w-4 h-4" strokeWidth={1.5} />
               </button>
-              <button onClick={onClose} className="p-1.5 text-[#5F6368] hover:text-[#202124] hover:bg-[#F3F3F1] rounded cursor-pointer" aria-label={t.close}>
-                <X className="w-5 h-5" />
+              <button
+                onClick={onClose}
+                className="inline-flex items-center justify-center w-10 h-10 text-muted hover:text-ink hover:bg-wash rounded-sm cursor-pointer"
+                aria-label={t.close}
+              >
+                <X className="w-5 h-5" strokeWidth={1.5} />
               </button>
             </div>
           </div>
 
           {/* Tabs */}
-          <div className="flex border-b border-[#DADCE0] px-5 bg-white text-xs font-medium print:hidden">
+          <div className="shrink-0 flex border-b border-line px-5 text-sm print:hidden" role="tablist">
             {(['details', 'audit'] as const).map((tab) => (
               <button
                 key={tab}
+                role="tab"
+                aria-selected={activeTab === tab}
                 onClick={() => setActiveTab(tab)}
-                className={`py-2 px-3 border-b-2 font-semibold cursor-pointer flex items-center gap-1.5 ${
-                  activeTab === tab ? 'border-[#6D4627] text-[#6D4627]' : 'border-transparent text-[#5F6368] hover:text-[#202124]'
+                className={`min-h-11 mr-5 -mb-px border-b cursor-pointer flex items-center gap-1.5 transition-colors ${
+                  activeTab === tab ? 'border-ink text-ink' : 'border-transparent text-muted hover:text-ink'
                 }`}
               >
-                {tab === 'audit' && <History className="w-3.5 h-3.5" />}
                 <span>{tab === 'details' ? t.requestDetailTitle : t.auditTrailTitle}</span>
-                {tab === 'audit' && audit && <span className="px-1.5 rounded-full bg-[#F3F3F1] text-[10px]">{audit.length}</span>}
+                {tab === 'audit' && audit && <span className="text-xs tabular-nums text-muted">{audit.length}</span>}
               </button>
             ))}
           </div>
 
-          <div className="overflow-y-auto p-5 space-y-4 text-xs sm:text-sm">
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:pb-5 space-y-5 text-sm">
             {actionError && (
-              <div className="p-2.5 bg-[#FCE8E6] border border-[#FAD2CF] rounded text-[#D93025] flex items-start gap-2 text-xs">
+              <div className="p-2.5 bg-danger-wash border border-danger-line rounded-sm text-danger flex items-start gap-2 text-xs">
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                 <span>{actionError}</span>
               </div>
             )}
             {actionSuccess && (
-              <div className="p-2.5 bg-[#E6F4EA] border border-[#CEEAD6] rounded text-[#137333] flex items-start gap-2 text-xs">
+              <div className="p-2.5 bg-ok-wash border border-ok-line rounded-sm text-ok flex items-start gap-2 text-xs">
                 <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
                 <span>{actionSuccess}</span>
               </div>
             )}
 
             {activeTab === 'audit' ? (
-              <div className="relative pl-6 space-y-3 before:content-[''] before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-[#DADCE0]">
-                {audit === null && <div className="text-[#5F6368]">{t.loading}</div>}
+              <div className="relative pl-6 space-y-3 before:content-[''] before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-line">
+                {audit === null && <div className="text-muted">{t.loading}</div>}
                 {audit?.map((entry) => (
                   <div key={entry.id} className="relative">
-                    <div className="absolute -left-6 top-1 w-5 h-5 rounded-full bg-white border-2 border-[#6D4627] flex items-center justify-center">
-                      <div className="w-1.5 h-1.5 rounded-full bg-[#6D4627]" />
+                    <div className="absolute -left-6 top-1 w-5 h-5 rounded-full bg-surface border-2 border-brand flex items-center justify-center">
+                      <div className="w-1.5 h-1.5 rounded-full bg-brand" />
                     </div>
-                    <div className="bg-[#F3F3F1] border border-[#DADCE0] p-2.5 rounded text-xs space-y-0.5">
-                      <div className="flex items-center justify-between gap-2 text-[#5F6368]">
-                        <span className="font-semibold text-[#202124] uppercase text-[10px]">
+                    <div className="bg-surface border border-line p-3 rounded-sm text-xs space-y-1">
+                      <div className="flex items-center justify-between gap-2 text-muted">
+                        <span className="font-semibold text-ink uppercase text-[10px]">
                           {auditActionLabel(entry.action, language)}
                           {entry.action === 'status_changed' && entry.fromStatus && entry.toStatus && (
                             <span className="normal-case font-normal">
@@ -379,8 +388,8 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                         </span>
                         <span className="font-mono text-[11px] whitespace-nowrap">{entry.at ? formatCancunDateTime(entry.at, language) : '…'}</span>
                       </div>
-                      {entry.details && <div className="text-[#202124] whitespace-pre-wrap">{auditDetailsText(t, language, entry)}</div>}
-                      <div className="text-[11px] text-[#5F6368]">
+                      {entry.details && <div className="text-ink whitespace-pre-wrap">{auditDetailsText(t, language, entry)}</div>}
+                      <div className="text-[11px] text-muted">
                         {entry.by.name} ({auditRoleLabel(entry.by.role, language)})
                       </div>
                     </div>
@@ -395,8 +404,8 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                     <div
                       key={p.key}
                       title={statusHelp(t, p.key)}
-                      className={`p-1.5 rounded border font-medium ${
-                        request.status === p.key ? `${STATUS_STYLE[p.key]} font-bold` : p.reached ? 'bg-white border-[#DADCE0] text-[#137333]' : 'bg-[#FAFAFA] border-[#DADCE0] text-[#70757A]'
+                      className={`p-1.5 rounded-sm border font-medium ${
+                        request.status === p.key ? `${STATUS_STYLE[p.key]} font-medium` : p.reached ? 'bg-surface border-line text-ok' : 'bg-wash border-line text-muted'
                       }`}
                     >
                       {statusLabel(t, p.key)}
@@ -406,36 +415,36 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
 
                 <TicketTimer request={request} audit={audit} t={t} />
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
-                  {attr(t.filterVilla, <span className="font-bold text-[#6D4627]">{locationLabel(t, request.location.code, request.location.name)}</span>)}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-5 text-sm">
+                  {attr(t.filterVilla, <span className="font-medium text-brand">{locationLabel(t, request.location.code, request.location.name)}</span>)}
                   {attr(t.filterCategory, requestCategoryLabel(t, request))}
                   {attr(
                     t.filterPriority,
                     <span className="flex flex-wrap items-center gap-1">
-                      <span className={`px-1.5 py-0.5 rounded text-[11px] font-bold uppercase ${PRIORITY_STYLE[request.priority]}`}>{priorityBadge(t, request.priority)}</span>
-                      <span className="text-[10px] text-[#5F6368]">({prioritySla(t, request.priority)})</span>
+                      <span className={`px-1.5 py-0.5 rounded-sm text-[11px] font-medium uppercase ${PRIORITY_STYLE[request.priority]}`}>{priorityBadge(t, request.priority)}</span>
+                      <span className="text-[10px] text-muted">({prioritySla(t, request.priority)})</span>
                     </span>,
                   )}
-                  {attr(t.assignedSupervisorLabel, request.assignedTo?.name ?? <span className="italic text-[#70757A]">{t.notAssignedYet}</span>)}
+                  {attr(t.assignedSupervisorLabel, request.assignedTo?.name ?? <span className="italic text-muted">{t.notAssignedYet}</span>)}
                 </div>
 
-                <div className="bg-white border border-[#DADCE0] p-3.5 rounded-lg space-y-2">
+                <div className="border-t border-line pt-4 space-y-3">
                   {request.locationDetail && (
-                    <div className="pb-2 border-b border-[#DADCE0]">
-                      <span className="text-[#5F6368] text-xs font-semibold uppercase block">{t.locationDetailLabel}</span>
-                      <div className="font-medium text-[#202124] mt-0.5">{request.locationDetail}</div>
+                    <div className="pb-2 border-b border-line">
+                      <span className="kl-label block">{t.locationDetailLabel}</span>
+                      <div className="font-medium text-ink mt-0.5">{request.locationDetail}</div>
                     </div>
                   )}
                   <div>
-                    <span className="text-[#5F6368] text-xs font-semibold uppercase block">{t.notesLabel}</span>
+                    <span className="kl-label block">{t.notesLabel}</span>
                     <div
-                      className="rich-text text-[#202124] mt-0.5 leading-relaxed break-words"
+                      className="rich-text text-ink mt-1.5 text-[15px] leading-[1.75] break-words"
                       dangerouslySetInnerHTML={{ __html: notesToHtml(request.notes) }}
                     />
                   </div>
-                  <div className="pt-2 border-t border-[#DADCE0] flex flex-wrap gap-x-4 gap-y-1 justify-between text-[11px] text-[#5F6368]">
+                  <div className="pt-3 border-t border-line flex flex-wrap gap-x-4 gap-y-1 justify-between text-xs text-muted">
                     <span>
-                      {t.submittedByLabel}: <strong className="text-[#202124]">{request.submittedBy.name}</strong>
+                      {t.submittedByLabel}: <strong className="text-ink">{request.submittedBy.name}</strong>
                     </span>
                     <span>
                       {t.submissionTimeLabel}: {formatCancunDateTime(request.createdAt, language)}
@@ -444,17 +453,17 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                 </div>
 
                 {/* Before photos */}
-                <div className="border border-[#DADCE0] rounded-lg p-3 bg-[#FAFAFA] space-y-2">
+                <div className="border-t border-line pt-4 space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold text-xs text-[#202124] flex items-center gap-1.5">
-                      <Camera className="w-3.5 h-3.5 text-[#6D4627]" />
+                    <span className="kl-label flex items-center gap-1.5">
+                      <Camera className="w-3.5 h-3.5" strokeWidth={1.5} />
                       {t.beforePhotosTitle}
                     </span>
-                    <span className="text-xs text-[#5F6368]">{request.beforePhotos.length}</span>
+                    <span className="text-xs text-muted">{request.beforePhotos.length}</span>
                   </div>
                   <PhotoGrid photos={request.beforePhotos} onOpen={setLightboxPhoto} emptyText={t.noPhotosAttached} />
                   {canAddBeforePhotos && (
-                    <div className="pt-2 border-t border-[#DADCE0] space-y-2 print:hidden">
+                    <div className="pt-2 border-t border-line space-y-2 print:hidden">
                       <PhotoPicker
                         files={beforeFiles}
                         setFiles={setBeforeFiles}
@@ -468,7 +477,7 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                           type="button"
                           disabled={isSubmitting}
                           onClick={() => handleAddPhotos('before', beforeFiles, () => setBeforeFiles([]))}
-                          className="px-3 py-1 bg-[#6D4627] hover:bg-[#55361D] text-white rounded text-xs font-semibold cursor-pointer disabled:opacity-50"
+                          className="min-h-10 px-4 bg-brand hover:bg-brand-deep text-surface rounded-sm text-sm font-medium cursor-pointer disabled:opacity-50"
                         >
                           {es ? 'Subir fotos' : 'Upload photos'}
                         </button>
@@ -479,20 +488,20 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
 
                 {/* Add a note (below the initial photos, above the supervisor actions) */}
                 {canAddNote && (
-                  <div className="flex items-start gap-2 print:hidden">
+                  <div className="flex flex-col sm:flex-row sm:items-start gap-2 print:hidden">
                     <textarea
                       rows={1}
                       value={noteText}
                       onChange={(e) => setNoteText(e.target.value)}
                       maxLength={2000}
                       placeholder={es ? 'Agregar una nota al historial...' : 'Add a note to the history...'}
-                      className="flex-1 bg-white border border-[#DADCE0] rounded px-3 py-1.5 text-xs focus:outline-hidden focus:border-[#1A73E8]"
+                      className="flex-1 min-h-11 bg-surface border border-line rounded-sm px-3 py-2.5 text-sm focus:outline-hidden focus:border-ink"
                     />
                     <button
                       type="button"
                       onClick={handleNote}
                       disabled={isSubmitting || !noteText.trim()}
-                      className="px-3 py-1.5 bg-white hover:bg-[#F3F3F1] border border-[#DADCE0] rounded text-xs font-medium flex items-center gap-1 disabled:opacity-40 cursor-pointer"
+                      className="min-h-11 px-4 bg-surface hover:bg-wash border border-line-strong rounded-sm text-sm inline-flex items-center justify-center gap-2 disabled:opacity-40 cursor-pointer"
                     >
                       <MessageSquarePlus className="w-3.5 h-3.5" />
                       {t.addNoteAction}
@@ -501,13 +510,13 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                 )}
 
                 {request.afterPhotos.length > 0 && (
-                  <div className="border border-[#137333]/30 rounded-lg p-3 bg-[#E6F4EA]/20 space-y-2">
+                  <div className="border-t border-ok-line pt-4 space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="font-semibold text-xs text-[#137333] flex items-center gap-1.5">
+                      <span className="font-semibold text-xs text-ok flex items-center gap-1.5">
                         <CheckCircle2 className="w-3.5 h-3.5" />
                         {t.afterPhotosTitle}
                       </span>
-                      <span className="text-xs text-[#137333]">{request.afterPhotos.length}</span>
+                      <span className="text-xs text-ok">{request.afterPhotos.length}</span>
                     </div>
                     <PhotoGrid photos={request.afterPhotos} onOpen={setLightboxPhoto} emptyText={t.noPhotosAttached} />
                   </div>
@@ -515,7 +524,7 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
 
                 {/* Completed summary (everyone) */}
                 {request.status === 'completada' && (
-                  <div className="bg-[#E6F4EA] border border-[#CEEAD6] p-2.5 rounded text-xs space-y-1 text-[#137333]">
+                  <div className="bg-ok-wash/60 border-l-2 border-ok px-3.5 py-3 text-sm space-y-1.5 text-ok">
                     {request.completedAt && (
                       <div>
                         <strong>{t.completedAtLabel}:</strong> {formatCancunDateTime(request.completedAt, language)}
@@ -527,11 +536,11 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                       </div>
                     )}
                     {request.supervisorNotes && (
-                      <div className="pt-1 border-t border-[#CEEAD6] text-[#202124] whitespace-pre-wrap">
+                      <div className="pt-1 border-t border-ok-line text-ink whitespace-pre-wrap">
                         <strong>{t.supervisorNotesLabel}:</strong> {request.supervisorNotes}
                       </div>
                     )}
-                    <div className="text-[10px] text-[#5F6368] pt-0.5 flex items-center gap-1">
+                    <div className="text-[10px] text-muted pt-0.5 flex items-center gap-1">
                       <Lock className="w-3 h-3" />
                       <span>{t.alreadyCompletedNotice}</span>
                     </div>
@@ -541,25 +550,25 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                 {/* Supervisor lifecycle controls (staff see none). Location, category, priority and
                     supervisor are edited from the pencil in the Work Orders table. */}
                 {isSupervisor && isOpen && (
-                  <div className="border border-[#6D4627]/30 rounded-lg p-3.5 bg-[#F4EFEA]/30 space-y-3 print:hidden">
+                  <div className="border-t-2 border-brand pt-4 space-y-4 print:hidden">
                     <div
                       className={`flex flex-wrap items-center justify-between gap-2 ${
                         (allowed.includes('pendiente') && showPendingForm) || allowed.includes('completada')
-                          ? 'pb-2 border-b border-[#E8DEC9]'
+                          ? 'pb-2 border-b border-line'
                           : ''
                       }`}
                     >
                       <div className="flex items-center gap-1.5">
-                        <ShieldCheck className="w-4 h-4 text-[#6D4627]" />
-                        <h3 className="font-semibold text-xs sm:text-sm text-[#202124]">{t.supervisorWorkflowTitle}</h3>
+                        <ShieldCheck className="w-4 h-4 text-brand" strokeWidth={1.5} />
+                        <h3 className="text-base text-ink">{t.supervisorWorkflowTitle}</h3>
                       </div>
-                      <div className="flex flex-wrap items-center justify-end gap-2 ml-auto">
+                      <div className="grid grid-cols-1 w-full sm:w-auto sm:flex sm:flex-wrap sm:items-center sm:justify-end gap-2 sm:ml-auto">
                         {allowed.includes('reconocida') && (
                           <button
                             type="button"
                             disabled={isSubmitting}
                             onClick={() => handleTransition('reconocida')}
-                            className="px-3.5 py-1.5 bg-[#1A73E8] hover:bg-[#1557B0] text-white rounded text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                            className="min-h-11 px-4 justify-center bg-info hover:bg-info-deep text-surface rounded-sm text-sm font-medium flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                           >
                             <PlayCircle className="w-3.5 h-3.5" />
                             {request.status === 'pendiente' ? t.actionResumeWork : t.actionStartWork}
@@ -574,8 +583,8 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                               setShowPendingForm((v) => !v);
                             }}
                             aria-expanded={showPendingForm}
-                            className={`px-3.5 py-1.5 border border-[#8430CE] text-[#8430CE] rounded text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50 ${
-                              showPendingForm ? 'bg-[#F3E8FD]' : 'bg-white hover:bg-[#F3E8FD]'
+                            className={`min-h-11 px-4 justify-center border border-plum text-plum rounded-sm text-sm font-medium flex items-center gap-1.5 cursor-pointer disabled:opacity-50 ${
+                              showPendingForm ? 'bg-plum-wash' : 'bg-surface hover:bg-plum-wash'
                             }`}
                           >
                             <PauseCircle className="w-3.5 h-3.5" />
@@ -587,7 +596,7 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                             type="submit"
                             form="completion-form"
                             disabled={isSubmitting}
-                            className="px-3.5 py-1.5 bg-[#137333] hover:bg-[#0E5B28] text-white rounded text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-xs"
+                            className="min-h-11 px-4 justify-center bg-ok hover:bg-ok-deep text-surface rounded-sm text-sm font-medium flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                           >
                             <CheckCircle2 className="w-3.5 h-3.5" />
                             {t.confirmComplete}
@@ -597,10 +606,10 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                     </div>
 
                     {allowed.includes('pendiente') && showPendingForm && (
-                      <form onSubmit={handleMarkPending} className="bg-white p-3 rounded border border-[#8430CE]/40 space-y-2.5">
+                      <form onSubmit={handleMarkPending} className="border-l-2 border-plum pl-4 py-1 space-y-3">
                         <div>
-                          <label htmlFor="pending-reason" className="block text-xs font-semibold text-[#202124] mb-1">
-                            {t.pendingReasonLabel} <span className="text-[#D93025]">*</span>
+                          <label htmlFor="pending-reason" className="block text-xs font-semibold text-ink mb-1">
+                            {t.pendingReasonLabel} <span className="text-danger">*</span>
                           </label>
                           <textarea
                             id="pending-reason"
@@ -611,14 +620,14 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                             placeholder={t.pendingReasonPlaceholder}
                             maxLength={2000}
                             required
-                            className="w-full bg-white border border-[#DADCE0] rounded px-3 py-1.5 text-xs focus:outline-hidden focus:border-[#8430CE]"
+                            className="w-full bg-surface border border-line rounded-sm px-3 py-2.5 text-sm focus:outline-hidden focus:border-plum"
                           />
                         </div>
                         <div className="flex flex-wrap gap-2">
                           <button
                             type="submit"
                             disabled={isSubmitting || !pendingReason.trim()}
-                            className="px-3.5 py-1.5 bg-[#8430CE] hover:bg-[#6A26A6] text-white rounded text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                            className="min-h-11 px-4 justify-center bg-plum hover:bg-plum-deep text-surface rounded-sm text-sm font-medium flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                           >
                             <PauseCircle className="w-3.5 h-3.5" />
                             {t.confirmPending}
@@ -629,7 +638,7 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                               setShowPendingForm(false);
                               setPendingReason('');
                             }}
-                            className="px-3.5 py-1.5 bg-white hover:bg-[#F3F3F1] border border-[#DADCE0] rounded text-xs font-medium cursor-pointer"
+                            className="min-h-11 px-4 justify-center bg-surface hover:bg-wash border border-line rounded-sm text-xs font-medium cursor-pointer"
                           >
                             {t.cancel}
                           </button>
@@ -638,10 +647,10 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                     )}
 
                     {allowed.includes('completada') && (
-                      <form id="completion-form" onSubmit={handleComplete} className="bg-white p-3 rounded border border-[#DADCE0] space-y-2.5">
+                      <form id="completion-form" onSubmit={handleComplete} className="border-l-2 border-ok pl-4 py-1 space-y-3">
                         <div>
-                          <label htmlFor="completion-notes" className="block text-xs font-semibold text-[#202124] mb-1">
-                            {t.supervisorNotesLabel} <span className="text-[#D93025]">*</span>
+                          <label htmlFor="completion-notes" className="block text-xs font-semibold text-ink mb-1">
+                            {t.supervisorNotesLabel} <span className="text-danger">*</span>
                           </label>
                           <textarea
                             id="completion-notes"
@@ -650,12 +659,12 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                             onChange={(e) => setCompletionNotes(e.target.value)}
                             placeholder={t.supervisorNotesPlaceholder}
                             maxLength={2000}
-                            className="w-full bg-white border border-[#DADCE0] rounded px-3 py-1.5 text-xs focus:outline-hidden focus:border-[#1A73E8]"
+                            className="w-full bg-surface border border-line rounded-sm px-3 py-2.5 text-sm focus:outline-hidden focus:border-ink"
                             required
                           />
                         </div>
                         <div>
-                          <label className="block text-xs font-semibold text-[#202124] mb-1">{t.afterPhotosUploadLabel}</label>
+                          <label className="block text-xs font-semibold text-ink mb-1">{t.afterPhotosUploadLabel}</label>
                           <PhotoPicker
                             files={afterFiles}
                             setFiles={setAfterFiles}
@@ -673,9 +682,9 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
             )}
           </div>
 
-          <div className="px-5 py-2.5 border-t border-[#DADCE0] bg-[#FAFAFA] flex items-center justify-between text-xs print:hidden">
-            <span className="text-[#5F6368] font-mono text-[11px]">{request.id}</span>
-            <button onClick={onClose} className="px-3.5 py-1.5 rounded border border-[#DADCE0] bg-white hover:bg-[#F3F3F1] font-medium cursor-pointer">
+          <div className="shrink-0 px-5 pt-2.5 pb-[calc(0.625rem+env(safe-area-inset-bottom))] sm:pb-2.5 border-t border-line bg-surface flex items-center justify-between gap-3 text-xs print:hidden">
+            <span className="text-faint font-mono text-[11px] truncate">{request.id}</span>
+            <button onClick={onClose} className="shrink-0 min-h-10 px-4 rounded-sm border border-line-strong bg-surface hover:bg-wash text-sm cursor-pointer">
               {t.close}
             </button>
           </div>

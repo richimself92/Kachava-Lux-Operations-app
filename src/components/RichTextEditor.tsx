@@ -73,7 +73,7 @@ const LABELS = {
   },
 } as const;
 
-const COLORS = ['#202124', '#D93025', '#E37400', '#137333', '#1A73E8', '#8430CE', '#6D4627', '#5F6368'];
+const COLORS = ['#2A2A28', '#A8322D', '#8F611A', '#4F6B3A', '#3F5A7A', '#6E4E6B', '#6D4627', '#6B6A65'];
 
 type ToggleCommand = 'bold' | 'italic' | 'underline' | 'strikeThrough' | 'insertOrderedList' | 'insertUnorderedList';
 const TOGGLES: ToggleCommand[] = ['bold', 'italic', 'underline', 'strikeThrough', 'insertOrderedList', 'insertUnorderedList'];
@@ -188,23 +188,23 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange,
       aria-pressed={isActive}
       onMouseDown={keepSelection}
       onClick={onClick}
-      className={`p-1.5 rounded transition-colors cursor-pointer ${
-        isActive ? 'bg-[#F4EFEA] text-[#6D4627]' : 'text-[#5F6368] hover:bg-[#F3F3F1] hover:text-[#202124]'
+      className={`p-1.5 rounded-sm transition-colors cursor-pointer ${
+        isActive ? 'bg-brand-wash text-brand' : 'text-muted hover:bg-wash hover:text-ink'
       }`}
     >
       {icon}
     </button>
   );
 
-  const sep = <span className="w-px h-5 bg-[#DADCE0] mx-0.5" aria-hidden />;
+  const sep = <span className="w-px h-5 bg-line mx-0.5" aria-hidden />;
   const icon = 'w-4 h-4';
 
   return (
-    <div className="border border-[#DADCE0] rounded focus-within:border-[#1A73E8] bg-white">
+    <div className="border border-line rounded-sm focus-within:border-info bg-surface">
       <div
         role="toolbar"
         aria-label={L.toolbar}
-        className={`sticky ${stickyTopClass} z-10 bg-[#FAFAFA] border-b border-[#DADCE0] rounded-t px-1.5 py-1`}
+        className={`sticky ${stickyTopClass} z-10 bg-wash border-b border-line rounded-t px-1.5 py-1`}
       >
         <div className="flex flex-wrap items-center gap-0.5">
           {btn(L.bold, <Bold className={icon} />, () => exec('bold'), active.has('bold'))}
@@ -218,7 +218,7 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange,
               setShowColors((v) => !v);
             })}
             {showColors && (
-              <div className="absolute left-0 top-full mt-1 z-20 bg-white border border-[#DADCE0] rounded-md shadow-lg p-2 w-40">
+              <div className="absolute left-0 top-full mt-1 z-20 bg-surface border border-line rounded-md p-2 w-40">
                 <div className="grid grid-cols-4 gap-1.5">
                   {COLORS.map((c, i) => (
                     <button
@@ -231,7 +231,7 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange,
                         exec('foreColor', c);
                         setShowColors(false);
                       }}
-                      className="w-7 h-7 rounded-full border border-[#DADCE0] cursor-pointer hover:scale-110 transition-transform"
+                      className="w-7 h-7 rounded-full border border-line cursor-pointer hover:scale-110 transition-transform"
                       style={{ backgroundColor: c }}
                     />
                   ))}
@@ -268,32 +268,32 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange,
                 }
               }}
               placeholder={L.linkPlaceholder}
-              className={`flex-1 min-w-[10rem] bg-white border rounded px-2 py-1 text-xs focus:outline-hidden ${
-                linkError ? 'border-[#D93025]' : 'border-[#DADCE0] focus:border-[#1A73E8]'
+              className={`flex-1 min-w-[10rem] bg-surface border rounded-sm px-2 py-1 text-xs focus:outline-hidden ${
+                linkError ? 'border-danger' : 'border-line focus:border-info'
               }`}
             />
             <button
               type="button"
               onClick={insertLink}
-              className="px-2.5 py-1 text-xs font-medium rounded bg-[#6D4627] hover:bg-[#55361D] text-white cursor-pointer"
+              className="px-2.5 py-1 text-xs font-medium rounded-sm bg-brand hover:bg-brand-deep text-surface cursor-pointer"
             >
               {L.insert}
             </button>
             <button
               type="button"
               onClick={() => setLinkOpen(false)}
-              className="px-2.5 py-1 text-xs font-medium rounded border border-[#DADCE0] text-[#5F6368] hover:bg-[#F3F3F1] cursor-pointer"
+              className="px-2.5 py-1 text-xs font-medium rounded-sm border border-line text-muted hover:bg-wash cursor-pointer"
             >
               {L.cancel}
             </button>
-            {linkError && <span className="w-full text-[11px] text-[#D93025]">{L.invalidLink}</span>}
+            {linkError && <span className="w-full text-[11px] text-danger">{L.invalidLink}</span>}
           </div>
         )}
       </div>
 
       <div className="relative">
         {isEmpty && placeholder && (
-          <div className="absolute inset-0 px-3 py-2 text-sm text-[#9AA0A6] pointer-events-none select-none">
+          <div className="absolute inset-0 px-3 py-2 text-sm text-faint pointer-events-none select-none">
             {placeholder}
           </div>
         )}
@@ -307,7 +307,7 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange,
           onInput={emit}
           onPaste={handlePaste}
           onFocus={() => setShowColors(false)}
-          className="rich-text min-h-[6rem] px-3 py-2 text-sm text-[#202124] leading-relaxed focus:outline-hidden break-words"
+          className="rich-text min-h-[6rem] px-3 py-2 text-sm text-ink leading-relaxed focus:outline-hidden break-words"
         />
       </div>
     </div>

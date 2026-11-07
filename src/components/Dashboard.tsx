@@ -1,18 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import {
-  AlertTriangle,
-  ArrowRight,
-  Building2,
-  Calendar,
-  CheckCircle2,
-  Clock,
-  Gauge,
-  Hourglass,
-  PauseCircle,
-  PlayCircle,
-  ShieldAlert,
-  Timer,
-} from 'lucide-react';
+import { ArrowRight, ShieldAlert } from 'lucide-react';
 import { STATUSES, type RequestStatus } from '../../shared/domain';
 import { useAuth } from '../context/AuthContext';
 import { useRequests } from '../context/RequestContext';
@@ -32,6 +19,7 @@ import {
   type Dict,
 } from '../lib/labels';
 import { formatCancunDate, formatCancunDateTime, formatCancunShort, formatDurationShort, isInPeriod } from '../lib/time';
+import { btnQuiet, btnSecondary, HairlineGrid, PageHeader, SectionHead, Segmented } from './Kit';
 import type { FilterOptions, MaintenanceCategory, MaintenanceRequest, RequestPriority, TimeFilter } from '../types';
 
 interface DashboardProps {
@@ -40,21 +28,21 @@ interface DashboardProps {
   onSelectRequest: (req: MaintenanceRequest) => void;
 }
 
-const STATE_CARD: Record<RequestStatus, { icon: React.ElementType; accent: string; label: keyof Dict }> = {
-  sin_revisar: { icon: Clock, accent: 'text-[#E37400] bg-[#FEF7E0]', label: 'kpiSinRevisar' },
-  pendiente: { icon: PauseCircle, accent: 'text-[#8430CE] bg-[#F3E8FD]', label: 'kpiPendiente' },
-  reconocida: { icon: PlayCircle, accent: 'text-[#1A73E8] bg-[#E8F0FE]', label: 'kpiReconocida' },
-  completada: { icon: CheckCircle2, accent: 'text-[#137333] bg-[#E6F4EA]', label: 'kpiCompletada' },
+const STATE_LABEL: Record<RequestStatus, keyof Dict> = {
+  sin_revisar: 'kpiSinRevisar',
+  pendiente: 'kpiPendiente',
+  reconocida: 'kpiReconocida',
+  completada: 'kpiCompletada',
 };
 
 /** Order shown on the location tiles (as requested: acknowledged, completed, pending, unreviewed). */
 const TILE_STATUS_ORDER: RequestStatus[] = ['reconocida', 'completada', 'pendiente', 'sin_revisar'];
 
 const STATUS_DOT: Record<RequestStatus, string> = {
-  sin_revisar: 'bg-[#E37400]',
-  pendiente: 'bg-[#8430CE]',
-  reconocida: 'bg-[#1A73E8]',
-  completada: 'bg-[#137333]',
+  sin_revisar: 'bg-pending',
+  pendiente: 'bg-plum',
+  reconocida: 'bg-info',
+  completada: 'bg-ok',
 };
 
 const dur = (ms: number | null) => (ms === null ? '—' : formatDurationShort(ms));
@@ -121,44 +109,50 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSelectTab, onSelectReque
   const villasList = residences.filter((r) => r.type === 'villa');
   const otherLocationsList = residences.filter((r) => r.type === 'facility');
 
-  const MetricCard: React.FC<{
-    icon: React.ElementType;
+  const MetricCell: React.FC<{
     label: string;
     value: string;
     sub?: string;
     tone?: 'bad' | 'normal';
-  }> = ({ icon: Icon, label, value, sub, tone = 'normal' }) => (
-    <div className={`bg-white border p-3.5 rounded-lg shadow-2xs ${tone === 'bad' ? 'border-[#D93025]' : 'border-[#DADCE0]'}`}>
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[11px] font-medium text-[#5F6368] uppercase tracking-wider">{label}</span>
-        <Icon className={`w-4 h-4 shrink-0 ${tone === 'bad' ? 'text-[#D93025]' : 'text-[#6D4627]'}`} />
+    className?: string;
+  }> = ({ label, value, sub, tone = 'normal', className = '' }) => (
+    <div className={`bg-surface p-4 sm:p-5 min-w-0 ${className}`}>
+      <div className={`kl-label lg:min-h-[2.8em] ${tone === 'bad' ? '!text-danger' : ''}`}>{label}</div>
+      <div
+        className={`mt-3 font-display text-[1.75rem] sm:text-[2rem] leading-none tabular-nums ${
+          tone === 'bad' ? 'text-danger' : 'text-ink'
+        }`}
+      >
+        {value}
       </div>
-      <div className={`mt-2 text-2xl font-semibold tabular-nums ${tone === 'bad' ? 'text-[#D93025]' : 'text-[#202124]'}`}>{value}</div>
-      {sub && <div className="mt-0.5 text-[11px] text-[#5F6368]">{sub}</div>}
+      {sub && <div className="mt-2 text-xs text-muted">{sub}</div>}
     </div>
   );
 
   const LocationTile: React.FC<{ code: string; name: string }> = ({ code, name }) => {
     const counts = statusCountsByLocation[code];
-    const hasIssues = (activeTicketCountsByVilla[code] || 0) > 0;
+    const active = activeTicketCountsByVilla[code] || 0;
     return (
       <button
         onClick={() => goToList({ locationCode: code, status: 'all', timeFilter: 'all' })}
-        className={`p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
-          hasIssues ? 'border-[#E37400]/40 bg-[#FEF7E0]/30 hover:bg-[#FEF7E0]/60' : 'border-[#DADCE0] bg-white hover:bg-[#F3F3F1]'
-        }`}
+        className="group flex flex-col justify-start bg-surface hover:bg-wash p-3.5 sm:p-4 text-left transition-colors cursor-pointer min-w-0"
       >
-        <div className="text-xs font-bold text-[#6D4627] mb-1.5 truncate">{locationLabel(t, code, name)}</div>
-        <dl className="space-y-0.5 text-[11px]">
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="text-sm text-ink truncate group-hover:text-brand transition-colors">{locationLabel(t, code, name)}</span>
+          {active > 0 && (
+            <span className="text-[11px] tabular-nums text-pending shrink-0">
+              {active} {es ? 'abiertas' : 'open'}
+            </span>
+          )}
+        </div>
+        <dl className="mt-2.5 space-y-1 text-xs">
           {TILE_STATUS_ORDER.map((s) => (
             <div key={s} className="flex items-center justify-between gap-1 min-w-0">
-              <dt className="flex items-center gap-1 text-[#5F6368] truncate">
+              <dt className="flex items-center gap-1.5 text-muted truncate">
                 <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_DOT[s]}`} />
                 <span className="truncate">{statusLabel(t, s)}</span>
               </dt>
-              <dd className={`tabular-nums font-semibold ${counts?.[s] ? 'text-[#202124]' : 'text-[#B0B3B8]'}`}>
-                {counts?.[s] ?? 0}
-              </dd>
+              <dd className={`tabular-nums ${counts?.[s] ? 'text-ink' : 'text-faint'}`}>{counts?.[s] ?? 0}</dd>
             </div>
           ))}
         </dl>
@@ -166,265 +160,308 @@ export const Dashboard: React.FC<DashboardProps> = ({ onSelectTab, onSelectReque
     );
   };
 
+  const statusBadge = (s: RequestStatus) => (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-sm text-[11px] font-medium border ${STATUS_STYLE[s]}`}>
+      {statusLabel(t, s)}
+    </span>
+  );
+
   return (
-    <div className="space-y-5">
-      {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 pb-2 border-b border-[#DADCE0]">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-semibold text-[#202124] tracking-tight">{t.overviewTitle}</h1>
-          <p className="text-xs text-[#5F6368] flex items-center gap-1.5 mt-0.5">
-            <Calendar className="w-3.5 h-3.5" />
-            <span className="capitalize">{formatCancunDate(now, language)} · Cancún</span>
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1 overflow-x-auto">
-            {periods.map((p) => (
-              <button
-                key={p.key}
-                onClick={() => setPeriod(p.key)}
-                className={`px-2.5 py-1 text-xs font-medium rounded-md whitespace-nowrap cursor-pointer ${
-                  period === p.key ? 'bg-[#6D4627] text-white font-semibold' : 'bg-white border border-[#DADCE0] text-[#5F6368] hover:text-[#202124]'
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
+    <div className="space-y-10 sm:space-y-14">
+      <div>
+        <PageHeader
+          eyebrow={es ? '01 — Resumen' : '01 — Overview'}
+          title={t.overviewTitle}
+          meta={<span className="capitalize">{formatCancunDate(now, language)} · Cancún</span>}
+          actions={
+            <button onClick={() => goToList({ status: 'all' })} className={btnSecondary}>
+              {t.viewAllRequests}
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          }
+        />
+        <Segmented
+          label={es ? 'Periodo' : 'Period'}
+          options={periods}
+          value={period}
+          onChange={setPeriod}
+          className="border-b border-line"
+        />
+
+        {/* Urgent alerts (all open urgent work, regardless of period) */}
+        {urgentOpen.length > 0 && (
+          <div className="mt-5 border-t-2 border-danger bg-danger-wash/60 px-4 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-3 min-w-0">
+              <ShieldAlert className="w-4 h-4 mt-0.5 text-danger shrink-0" />
+              <div className="min-w-0">
+                <div className="text-sm font-medium text-danger">
+                  {t.kpiUrgentAlerts}: {urgentOpen.length}
+                </div>
+                <div className="mt-0.5 text-xs text-muted break-words">
+                  {urgentOpen
+                    .slice(0, 6)
+                    .map((u) => `${ticketLabel(t, u)} (${locationLabel(t, u.location.code, u.location.name)})`)
+                    .join(' · ')}
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => goToList({ priority: 'urgent', status: 'all', timeFilter: 'all' })}
+              className="self-start sm:self-auto shrink-0 min-h-10 px-4 border border-danger text-danger hover:bg-danger hover:text-surface text-sm rounded-sm transition-colors cursor-pointer"
+            >
+              {es ? 'Ver urgentes' : 'Review'}
+            </button>
           </div>
-          <button
-            onClick={() => goToList({ status: 'all' })}
-            className="px-3 py-1.5 text-xs font-medium rounded-md border border-[#DADCE0] hover:bg-[#F3F3F1] text-[#202124] cursor-pointer flex items-center gap-1.5"
-          >
-            <span>{t.viewAllRequests}</span>
-          </button>
-        </div>
+        )}
       </div>
 
-      {/* Urgent alerts */}
-      {urgentOpen.length > 0 && (
-        <div className="bg-[#FCE8E6] border border-[#FAD2CF] rounded-lg p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-          <div className="flex items-center gap-2.5">
-            <div className="p-1.5 bg-[#D93025] text-white rounded-md shrink-0">
-              <ShieldAlert className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="text-xs sm:text-sm font-semibold text-[#D93025]">
-                {t.kpiUrgentAlerts}: {urgentOpen.length}
-              </div>
-              <div className="text-xs text-[#5F6368]">
-                {urgentOpen
-                  .slice(0, 6)
-                  .map((u) => `${ticketLabel(t, u)} (${locationLabel(t, u.location.code, u.location.name)})`)
-                  .join(' • ')}
-              </div>
-            </div>
-          </div>
-          <button
-            onClick={() => goToList({ priority: 'urgent', status: 'all', timeFilter: 'all' })}
-            className="px-2.5 py-1 bg-[#D93025] hover:bg-[#B3261E] text-white text-xs font-medium rounded-md shrink-0 cursor-pointer self-start sm:self-auto"
-          >
-            {es ? 'Ver urgentes' : 'Review'}
-          </button>
-        </div>
-      )}
-
       {/* State counts */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {STATUSES.map((s) => {
-          const card = STATE_CARD[s];
-          const Icon = card.icon;
-          return (
+      <section>
+        <SectionHead index={es ? '02 — Estado' : '02 — Status'} title={es ? 'Órdenes por estado' : 'Work orders by status'} />
+        <HairlineGrid className="grid-cols-2 lg:grid-cols-4">
+          {STATUSES.map((s) => (
             <button
               key={s}
               onClick={() => goToList({ status: s })}
               title={statusHelp(t, s)}
-              className="bg-white border border-[#DADCE0] hover:border-[#6D4627]/50 p-3.5 rounded-lg shadow-2xs text-left cursor-pointer"
+              className="group flex flex-col justify-start bg-surface hover:bg-wash p-4 sm:p-5 text-left cursor-pointer transition-colors min-w-0"
             >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-[#5F6368] uppercase tracking-wider">{t[card.label] as string}</span>
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center ${card.accent}`}>
-                  <Icon className="w-4 h-4" />
-                </div>
+              <div className="flex items-center gap-2 min-w-0">
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_DOT[s]}`} />
+                <span className="kl-label truncate">{t[STATE_LABEL[s]] as string}</span>
               </div>
-              <div className="mt-2 text-2xl font-semibold text-[#202124] tabular-nums">{loading ? '…' : summary.counts[s]}</div>
-              <div className="mt-1 text-[11px] text-[#5F6368] flex items-center gap-1">
-                <span>{statusHelp(t, s)}</span>
-                <ArrowRight className="w-3 h-3" />
+              <div className="mt-3 font-display text-[2.5rem] sm:text-5xl leading-none text-ink tabular-nums">
+                {loading ? '…' : summary.counts[s]}
+              </div>
+              <div className="mt-3 text-xs text-muted flex items-start gap-1">
+                <span className="line-clamp-2">{statusHelp(t, s)}</span>
+                <ArrowRight className="w-3 h-3 mt-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
             </button>
-          );
-        })}
-      </div>
+          ))}
+        </HairlineGrid>
+      </section>
 
       {/* Time KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <MetricCard
-          icon={AlertTriangle}
-          label={t.kpiOverdueUnreviewed}
-          value={String(summary.overdueUnreviewed)}
-          tone={summary.overdueUnreviewed > 0 ? 'bad' : 'normal'}
-        />
-        <MetricCard
-          icon={Gauge}
-          label={t.kpiSlaCompliance}
-          value={pct(summary.slaCompliance)}
-          sub={summary.respondedCount ? `${summary.respondedCount} ${es ? 'atendidas' : 'responded'}` : undefined}
-        />
-        <MetricCard
-          icon={Clock}
-          label={t.kpiAvgResponse}
-          value={dur(summary.avgResponseMs)}
-          sub={summary.medianResponseMs !== null ? `${t.kpiMedianResponse}: ${dur(summary.medianResponseMs)}` : undefined}
-        />
-        <MetricCard icon={Timer} label={t.kpiAvgWork} value={dur(summary.avgWorkMs)} />
-        <MetricCard
-          icon={Hourglass}
-          label={t.kpiAvgTotal}
-          value={dur(summary.avgTotalMs)}
-          sub={summary.completedCount ? `${summary.completedCount} ${es ? 'completadas' : 'completed'}` : undefined}
-        />
-      </div>
+      <section>
+        <SectionHead index={es ? '03 — Tiempos' : '03 — Timing'} title={es ? 'Tiempos de respuesta' : 'Response and work times'} />
+        <HairlineGrid className="grid-cols-2 lg:grid-cols-5">
+          <MetricCell
+            label={t.kpiOverdueUnreviewed}
+            value={String(summary.overdueUnreviewed)}
+            tone={summary.overdueUnreviewed > 0 ? 'bad' : 'normal'}
+          />
+          <MetricCell
+            label={t.kpiSlaCompliance}
+            value={pct(summary.slaCompliance)}
+            sub={summary.respondedCount ? `${summary.respondedCount} ${es ? 'atendidas' : 'responded'}` : undefined}
+          />
+          <MetricCell
+            label={t.kpiAvgResponse}
+            value={dur(summary.avgResponseMs)}
+            sub={summary.medianResponseMs !== null ? `${t.kpiMedianResponse}: ${dur(summary.medianResponseMs)}` : undefined}
+          />
+          <MetricCell label={t.kpiAvgWork} value={dur(summary.avgWorkMs)} />
+          <MetricCell
+            className="col-span-2 lg:col-span-1"
+            label={t.kpiAvgTotal}
+            value={dur(summary.avgTotalMs)}
+            sub={summary.completedCount ? `${summary.completedCount} ${es ? 'completadas' : 'completed'}` : undefined}
+          />
+        </HairlineGrid>
+      </section>
 
       {/* KPI breakdown */}
-      <div className="bg-white border border-[#DADCE0] rounded-lg shadow-2xs overflow-hidden">
-        <div className="p-3.5 border-b border-[#DADCE0] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <h2 className="text-sm sm:text-base font-semibold text-[#202124]">{t.kpiBreakdownTitle}</h2>
-          <label className="flex items-center gap-2 text-xs text-[#5F6368]">
-            {t.kpiBreakdownBy}
-            <select
-              value={dimension}
-              onChange={(e) => setDimension(e.target.value as KpiDimension)}
-              className="bg-white border border-[#DADCE0] rounded-md px-2 py-1 text-xs text-[#202124]"
-            >
-              {dimensions.map((d) => (
-                <option key={d.key} value={d.key}>
-                  {d.label}
-                </option>
+      <section>
+        <SectionHead
+          index={es ? '04 — Desglose' : '04 — Breakdown'}
+          title={t.kpiBreakdownTitle}
+          action={
+            <label className="flex items-center gap-2 text-xs text-muted shrink-0">
+              <span className="hidden sm:inline">{t.kpiBreakdownBy}</span>
+              <select
+                value={dimension}
+                onChange={(e) => setDimension(e.target.value as KpiDimension)}
+                aria-label={t.kpiBreakdownBy}
+                className="min-h-10 bg-surface border border-line rounded-sm px-2.5 text-sm text-ink cursor-pointer"
+              >
+                {dimensions.map((d) => (
+                  <option key={d.key} value={d.key}>
+                    {d.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          }
+        />
+        {rows.length === 0 ? (
+          <div className="border-y border-line py-8 text-center text-sm text-muted">{t.noDataYet}</div>
+        ) : (
+          <>
+            {/* Phones: one block per group */}
+            <ul className="sm:hidden border-y border-line divide-y divide-line">
+              {rows.map((r) => (
+                <li key={r.key} className="py-3.5">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="text-sm text-ink truncate">{groupLabel(r.key, r.name)}</span>
+                    <span className="text-sm tabular-nums text-ink shrink-0">{r.count}</span>
+                  </div>
+                  <dl className="mt-2 space-y-1 text-xs">
+                    {(
+                      [
+                        [t.kpiSlaCompliance, pct(r.slaCompliance)],
+                        [t.kpiAvgResponse, dur(r.avgResponseMs)],
+                        [t.kpiAvgWork, dur(r.avgWorkMs)],
+                        [t.kpiAvgTotal, dur(r.avgTotalMs)],
+                      ] as const
+                    ).map(([k, v]) => (
+                      <div key={k} className="flex justify-between gap-4 min-w-0">
+                        <dt className="text-muted truncate">{k}</dt>
+                        <dd className="tabular-nums text-ink whitespace-nowrap">{v}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </li>
               ))}
-            </select>
-          </label>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs sm:text-sm">
-            <thead className="bg-[#F3F3F1] border-b border-[#DADCE0] text-[#5F6368] uppercase text-[11px] font-semibold">
-              <tr>
-                <th className="px-4 py-2.5">{t.kpiColGroup}</th>
-                <th className="px-4 py-2.5 text-right">{t.kpiColCount}</th>
-                <th className="px-4 py-2.5 text-right">{t.kpiSlaCompliance}</th>
-                <th className="px-4 py-2.5 text-right">{t.kpiAvgResponse}</th>
-                <th className="px-4 py-2.5 text-right">{t.kpiAvgWork}</th>
-                <th className="px-4 py-2.5 text-right">{t.kpiAvgTotal}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#DADCE0]">
-              {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-[#5F6368]">
-                    {t.noDataYet}
-                  </td>
-                </tr>
-              ) : (
-                rows.map((r) => (
-                  <tr key={r.key}>
-                    <td className="px-4 py-2.5 font-medium text-[#202124] whitespace-nowrap">{groupLabel(r.key, r.name)}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums">{r.count}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums">{pct(r.slaCompliance)}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums">{dur(r.avgResponseMs)}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums">{dur(r.avgWorkMs)}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums">{dur(r.avgTotalMs)}</td>
+            </ul>
+            {/* Tablet / desktop: table */}
+            <div className="hidden sm:block overflow-x-auto border-y border-line">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-line">
+                    <th className="kl-label font-medium py-3 pr-4">{t.kpiColGroup}</th>
+                    <th className="kl-label font-medium py-3 px-4 text-right">{t.kpiColCount}</th>
+                    <th className="kl-label font-medium py-3 px-4 text-right">{t.kpiSlaCompliance}</th>
+                    <th className="kl-label font-medium py-3 px-4 text-right">{t.kpiAvgResponse}</th>
+                    <th className="kl-label font-medium py-3 px-4 text-right">{t.kpiAvgWork}</th>
+                    <th className="kl-label font-medium py-3 pl-4 text-right">{t.kpiAvgTotal}</th>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {rows.map((r) => (
+                    <tr key={r.key}>
+                      <td className="py-3 pr-4 text-ink whitespace-nowrap">{groupLabel(r.key, r.name)}</td>
+                      <td className="py-3 px-4 text-right tabular-nums">{r.count}</td>
+                      <td className="py-3 px-4 text-right tabular-nums">{pct(r.slaCompliance)}</td>
+                      <td className="py-3 px-4 text-right tabular-nums">{dur(r.avgResponseMs)}</td>
+                      <td className="py-3 px-4 text-right tabular-nums">{dur(r.avgWorkMs)}</td>
+                      <td className="py-3 pl-4 text-right tabular-nums">{dur(r.avgTotalMs)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </section>
 
       {/* Locations */}
-      <div className="bg-white border border-[#DADCE0] rounded-lg p-4 shadow-2xs space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm sm:text-base font-semibold text-[#202124]">{t.residenceDistribution}</h2>
-          <button onClick={() => onSelectTab('residences')} className="text-xs text-[#6D4627] hover:underline font-medium cursor-pointer">
-            {es ? 'Ver todas →' : 'View all →'}
-          </button>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+      <section>
+        <SectionHead
+          index={es ? '05 — Ubicaciones' : '05 — Locations'}
+          title={t.residenceDistribution}
+          action={
+            <button onClick={() => onSelectTab('residences')} className={btnQuiet}>
+              {es ? 'Ver todas' : 'View all'}
+            </button>
+          }
+        />
+        <HairlineGrid className="grid-cols-2 sm:grid-cols-4">
           {villasList.map((v) => (
             <LocationTile key={v.id} code={v.code} name={v.name} />
           ))}
-        </div>
-        <div className="pt-2 border-t border-[#F3F3F1]">
-          <div className="text-[11px] font-semibold text-[#5F6368] uppercase tracking-wider mb-2 flex items-center gap-1.5">
-            <Building2 className="w-3.5 h-3.5 text-[#6D4627]" />
-            <span>{t.locGroupOther}</span>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-            {otherLocationsList.map((f) => (
-              <LocationTile key={f.id} code={f.code} name={f.name} />
-            ))}
-          </div>
-        </div>
-      </div>
+        </HairlineGrid>
+        <div className="kl-label mt-6 mb-3">{t.locGroupOther}</div>
+        <HairlineGrid className="grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
+          {otherLocationsList.map((f) => (
+            <LocationTile key={f.id} code={f.code} name={f.name} />
+          ))}
+        </HairlineGrid>
+      </section>
 
       {/* Recent activity */}
-      <div className="bg-white border border-[#DADCE0] rounded-lg shadow-2xs overflow-hidden">
-        <div className="p-3.5 border-b border-[#DADCE0] flex items-center justify-between">
-          <h2 className="text-sm sm:text-base font-semibold text-[#202124]">{t.recentActivity}</h2>
-          <button onClick={() => onSelectTab('requests')} className="text-xs text-[#6D4627] hover:underline font-semibold cursor-pointer flex items-center gap-1">
-            <span>{t.viewAllRequests}</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs sm:text-sm">
-            <thead className="bg-[#F3F3F1] border-b border-[#DADCE0] text-[#5F6368] uppercase text-[11px] font-semibold">
-              <tr>
-                <th className="px-4 py-2.5">{t.ticketIdLabel}</th>
-                <th className="px-4 py-2.5">{t.filterVilla}</th>
-                <th className="px-4 py-2.5">{t.filterCategory}</th>
-                <th className="px-4 py-2.5">{t.filterPriority}</th>
-                <th className="px-4 py-2.5">{t.filterStatus}</th>
-                <th className="px-4 py-2.5">{t.assignedSupervisorLabel}</th>
-                <th className="px-4 py-2.5 text-right">{t.dateTimeColumn}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#DADCE0]">
-              {requests.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="px-4 py-6 text-center text-[#5F6368]">
-                    {loading ? t.loading : t.noDataYet}
-                  </td>
-                </tr>
-              )}
+      <section>
+        <SectionHead
+          index={es ? '06 — Recientes' : '06 — Recent'}
+          title={t.recentActivity}
+          action={
+            <button onClick={() => onSelectTab('requests')} className={btnQuiet}>
+              {t.viewAllRequests}
+            </button>
+          }
+        />
+        {requests.length === 0 ? (
+          <div className="border-y border-line py-8 text-center text-sm text-muted">{loading ? t.loading : t.noDataYet}</div>
+        ) : (
+          <>
+            {/* Phones / tablets: list */}
+            <ul className="lg:hidden border-y border-line divide-y divide-line">
               {requests.slice(0, 6).map((req) => (
-                <tr key={req.id} onClick={() => onSelectRequest(req)} className="hover:bg-[#F3F3F1] cursor-pointer">
-                  <td className={`px-4 py-2.5 font-medium whitespace-nowrap ${req.ticketId ? 'text-[#202124]' : 'italic text-[#70757A]'}`}>
-                    {ticketLabel(t, req)}
-                  </td>
-                  <td className="px-4 py-2.5 font-semibold text-[#6D4627] whitespace-nowrap">{locationLabel(t, req.location.code, req.location.name)}</td>
-                  <td className="px-4 py-2.5 text-[#202124] whitespace-nowrap">{requestCategoryLabel(t, req)}</td>
-                  <td className="px-4 py-2.5 whitespace-nowrap">
-                    <span className={`px-2 py-0.5 rounded-sm text-[11px] font-semibold uppercase ${PRIORITY_STYLE[req.priority]}`}>{priorityBadge(t, req.priority)}</span>
-                  </td>
-                  <td className="px-4 py-2.5 whitespace-nowrap">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${STATUS_STYLE[req.status]}`}>{statusLabel(t, req.status)}</span>
-                  </td>
-                  <td className="px-4 py-2.5 text-[#5F6368] whitespace-nowrap">
-                    {req.assignedTo?.name ?? <span className="italic text-[#70757A]">{t.notAssignedYet}</span>}
-                  </td>
-                  <td
-                    className="px-4 py-2.5 text-[#5F6368] text-right whitespace-nowrap tabular-nums text-xs"
-                    title={formatCancunDateTime(req.createdAt, language)}
+                <li key={req.id}>
+                  <button
+                    onClick={() => onSelectRequest(req)}
+                    className="w-full text-left py-3.5 active:bg-wash hover:bg-wash/60 transition-colors cursor-pointer"
                   >
-                    {formatCancunShort(req.createdAt, language)}
-                  </td>
-                </tr>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className={`text-sm tabular-nums ${req.ticketId ? 'text-ink' : 'italic text-muted'}`}>{ticketLabel(t, req)}</span>
+                      {statusBadge(req.status)}
+                    </div>
+                    <div className="mt-1 flex items-baseline justify-between gap-3 text-xs">
+                      <span className="text-brand truncate">
+                        {locationLabel(t, req.location.code, req.location.name)}
+                        <span className="text-muted"> · {requestCategoryLabel(t, req)}</span>
+                      </span>
+                      <span className="text-muted tabular-nums shrink-0">{formatCancunShort(req.createdAt, language)}</span>
+                    </div>
+                  </button>
+                </li>
               ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
+            </ul>
+            {/* Desktop: table */}
+            <div className="hidden lg:block border-y border-line">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-line">
+                    <th className="kl-label font-medium py-3 pr-4">{t.ticketIdLabel}</th>
+                    <th className="kl-label font-medium py-3 px-4">{t.filterVilla}</th>
+                    <th className="kl-label font-medium py-3 px-4">{t.filterCategory}</th>
+                    <th className="kl-label font-medium py-3 px-4">{t.filterPriority}</th>
+                    <th className="kl-label font-medium py-3 px-4">{t.filterStatus}</th>
+                    <th className="kl-label font-medium py-3 px-4">{t.assignedSupervisorLabel}</th>
+                    <th className="kl-label font-medium py-3 pl-4 text-right">{t.dateTimeColumn}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {requests.slice(0, 6).map((req) => (
+                    <tr key={req.id} onClick={() => onSelectRequest(req)} className="hover:bg-wash/60 cursor-pointer transition-colors">
+                      <td className={`py-3 pr-4 whitespace-nowrap tabular-nums ${req.ticketId ? 'text-ink' : 'italic text-muted'}`}>
+                        {ticketLabel(t, req)}
+                      </td>
+                      <td className="py-3 px-4 text-brand whitespace-nowrap">{locationLabel(t, req.location.code, req.location.name)}</td>
+                      <td className="py-3 px-4 text-ink whitespace-nowrap">{requestCategoryLabel(t, req)}</td>
+                      <td className="py-3 px-4 whitespace-nowrap">
+                        <span className={`px-1.5 py-0.5 rounded-sm text-[11px] font-medium uppercase tracking-wide ${PRIORITY_STYLE[req.priority]}`}>
+                          {priorityBadge(t, req.priority)}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 whitespace-nowrap">{statusBadge(req.status)}</td>
+                      <td className="py-3 px-4 text-muted whitespace-nowrap">
+                        {req.assignedTo?.name ?? <span className="italic">{t.notAssignedYet}</span>}
+                      </td>
+                      <td
+                        className="py-3 pl-4 text-muted text-right whitespace-nowrap tabular-nums text-xs"
+                        title={formatCancunDateTime(req.createdAt, language)}
+                      >
+                        {formatCancunShort(req.createdAt, language)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </section>
     </div>
   );
 };
