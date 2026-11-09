@@ -164,8 +164,8 @@ A request SHALL accept up to 5 before-repair photos (from the submitter at creat
 - photos are stored in Cloud Storage and referenced from the request
 
 #### Scenario: Oversized photo
-- **WHEN** a user attaches a 7 MB image
-- **THEN** it is rejected with a size message, and the backend would also reject the upload
+- **WHEN** a user attaches a 7 MB JPG, PNG, or WebP image
+- **THEN** the app reduces it to at most 5 MB before upload, or rejects it with a size message if it cannot, and the backend rejects any upload over 5 MB
 
 #### Scenario: Sixth photo
 - **WHEN** a request already has 5 before-repair photos and another is added

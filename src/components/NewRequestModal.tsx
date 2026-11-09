@@ -2,9 +2,10 @@ import React, { useState, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useRequests } from '../context/RequestContext';
 import { translations } from '../i18n/translations';
-import { ALLOWED_PHOTO_TYPES, MAX_PHOTO_BYTES, MAX_PHOTOS_PER_KIND } from '../../shared/domain';
+import { MAX_PHOTOS_PER_KIND } from '../../shared/domain';
 import { useNow } from '../hooks/useNow';
 import { categoryOptions, locationLabel, prioritySla } from '../lib/labels';
+import { PhotoPrepError, preparePhotos } from '../lib/photoPrep';
 import { MAX_NOTES_LENGTH, richTextToPlain, sanitizeRichText } from '../lib/richText';
 import { formatCancunDate, formatCancunTime } from '../lib/time';
 import { PhotoValidationError } from '../services/requests';
@@ -57,6 +58,7 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
   const [selectedPhotos, setSelectedPhotos] = useState<PreviewItem[]>([]);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isPreparingPhotos, setIsPreparingPhotos] = useState(false);
 
   // Live clock: the submission time is set by the server when the request is saved.
   const now = useNow(1000, isOpen);
@@ -113,12 +115,9 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
   const villasList = residences.filter((r) => r.type === 'villa');
   const otherLocationsList = residences.filter((r) => r.type === 'facility');
 
-  const handleFilesAdded = (files: FileList | null) => {
+  const handleFilesAdded = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     setFormError(null);
-
-    const allowedTypes: readonly string[] = ALLOWED_PHOTO_TYPES;
-    const maxSizeBytes = MAX_PHOTO_BYTES;
 
     const currentCount = selectedPhotos.length;
     const remainingSlots = MAX_PHOTOS_PER_KIND - currentCount;
@@ -131,26 +130,23 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
     }
 
     const filesArray = Array.from(files).slice(0, remainingSlots);
-    const newPreviews: PreviewItem[] = [];
 
-    for (const file of filesArray) {
-      if (!allowedTypes.includes(file.type)) {
-        setFormError(t.photoFormatError.replace('{name}', file.name));
-        return;
-      }
-      if (file.size > maxSizeBytes) {
-        setFormError(t.photoSizeError.replace('{name}', file.name));
-        return;
-      }
-
-      newPreviews.push({
+    setIsPreparingPhotos(true);
+    try {
+      const prepared = await preparePhotos(filesArray);
+      const newPreviews: PreviewItem[] = prepared.map((file) => ({
         id: Math.random().toString(36).substring(2, 9),
         file,
         previewUrl: URL.createObjectURL(file),
-      });
+      }));
+      setSelectedPhotos((prev) => [...prev, ...newPreviews]);
+    } catch (err) {
+      const name = err instanceof PhotoPrepError ? err.fileName : '';
+      const message = err instanceof PhotoPrepError && err.reason === 'too_large' ? t.photoSizeError : t.photoFormatError;
+      setFormError(message.replace('{name}', name));
+    } finally {
+      setIsPreparingPhotos(false);
     }
-
-    setSelectedPhotos((prev) => [...prev, ...newPreviews]);
   };
 
   const handleRemovePhoto = (id: string) => {
@@ -468,7 +464,7 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
             <input
               ref={cameraInputRef}
               type="file"
-              accept="image/jpeg,image/png,image/webp"
+              accept="image/*"
               capture="environment"
               className="hidden"
               onChange={(e) => {
@@ -477,7 +473,13 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
               }}
             />
 
-            {selectedPhotos.length < MAX_PHOTOS_PER_KIND && (
+            {isPreparingPhotos && (
+              <p role="status" className="text-xs text-muted">
+                {t.photoProcessing}
+              </p>
+            )}
+
+            {selectedPhotos.length < MAX_PHOTOS_PER_KIND && !isPreparingPhotos && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <button
                   type="button"
@@ -538,7 +540,7 @@ export const NewRequestModal: React.FC<NewRequestModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || isPreparingPhotos}
               className="flex-[2] sm:flex-none min-h-11 px-5 text-sm font-medium rounded-sm bg-brand hover:bg-brand-deep text-surface transition-colors cursor-pointer disabled:opacity-50 inline-flex items-center justify-center gap-2"
             >
               {isSubmitting ? (

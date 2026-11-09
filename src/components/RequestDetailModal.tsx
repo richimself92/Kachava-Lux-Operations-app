@@ -16,7 +16,6 @@ import {
 import {
   ALLOWED_PHOTO_TYPES,
   isSupervisorRole,
-  MAX_PHOTO_BYTES,
   MAX_PHOTOS_PER_KIND,
   TRANSITIONS,
 } from '../../shared/domain';
@@ -36,6 +35,7 @@ import {
   type Dict,
 } from '../lib/labels';
 import { auditActionLabel, auditDetailsText, auditRoleLabel } from '../lib/auditText';
+import { PhotoPrepError, preparePhotos } from '../lib/photoPrep';
 import { notesToHtml } from '../lib/richText';
 import { formatCancunDateTime } from '../lib/time';
 import { db } from '../services/firebase';
@@ -70,24 +70,40 @@ const PhotoPicker: React.FC<{
   language: Language;
   t: Dict;
   onError: (msg: string | null) => void;
-  /** Rendered at the right end of the camera/files row (e.g. a submit button). */
-}> = ({ files, setFiles, maxFiles, language, t, onError }) => {
+  /** Lets the parent hold its submit buttons until picked photos are ready. */
+  onBusyChange: (busy: boolean) => void;
+}> = ({ files, setFiles, maxFiles, language, t, onError, onBusyChange }) => {
   const fileRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
   const es = language === 'es';
 
-  const add = (list: FileList | null) => {
+  const setPreparing = (value: boolean) => {
+    setBusy(value);
+    onBusyChange(value);
+  };
+
+  const add = async (list: FileList | null) => {
     if (!list) return;
     onError(null);
     const slots = maxFiles - files.length;
     if (slots <= 0) return onError(t.photoCountLimit.replace('{count}', String(files.length)));
-    const next: PendingFile[] = [];
-    for (const file of Array.from(list).slice(0, slots)) {
-      if (!(ALLOWED_PHOTO_TYPES as readonly string[]).includes(file.type)) return onError(t.photoFormatError.replace('{name}', file.name));
-      if (file.size > MAX_PHOTO_BYTES) return onError(t.photoSizeError.replace('{name}', file.name));
-      next.push({ id: Math.random().toString(36).slice(2, 9), file, previewUrl: URL.createObjectURL(file) });
+    const picked = Array.from(list).slice(0, slots);
+    if (picked.length === 0) return;
+    setPreparing(true);
+    try {
+      const prepared = await preparePhotos(picked);
+      setFiles((prev) => [
+        ...prev,
+        ...prepared.map((file) => ({ id: Math.random().toString(36).slice(2, 9), file, previewUrl: URL.createObjectURL(file) })),
+      ]);
+    } catch (err) {
+      const name = err instanceof PhotoPrepError ? err.fileName : '';
+      const message = err instanceof PhotoPrepError && err.reason === 'too_large' ? t.photoSizeError : t.photoFormatError;
+      onError(message.replace('{name}', name));
+    } finally {
+      setPreparing(false);
     }
-    setFiles((prev) => [...prev, ...next]);
   };
 
   const remove = (id: string) =>
@@ -98,15 +114,20 @@ const PhotoPicker: React.FC<{
     });
 
   const reset = (e: React.ChangeEvent<HTMLInputElement>) => {
-    add(e.target.files);
+    void add(e.target.files);
     e.target.value = '';
   };
 
   return (
     <div className="space-y-2">
       <input ref={fileRef} type="file" multiple accept={ALLOWED_PHOTO_TYPES.join(',')} className="hidden" onChange={reset} />
-      <input ref={cameraRef} type="file" accept={ALLOWED_PHOTO_TYPES.join(',')} capture="environment" className="hidden" onChange={reset} />
-      {files.length < maxFiles && (
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={reset} />
+      {busy && (
+        <p role="status" className="text-xs text-muted">
+          {t.photoProcessing}
+        </p>
+      )}
+      {files.length < maxFiles && !busy && (
         <div className="flex flex-wrap items-center gap-2">
           {files.length < maxFiles && (
             <>
@@ -186,6 +207,7 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
   const [completionNotes, setCompletionNotes] = useState('');
   const [afterFiles, setAfterFiles] = useState<PendingFile[]>([]);
   const [beforeFiles, setBeforeFiles] = useState<PendingFile[]>([]);
+  const [isPreparingPhotos, setIsPreparingPhotos] = useState(false);
   const [noteText, setNoteText] = useState('');
 
   const reqId = request?.id;
@@ -471,11 +493,12 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                         language={language}
                         t={t}
                         onError={setActionError}
+                        onBusyChange={setIsPreparingPhotos}
                       />
                       {beforeFiles.length > 0 && (
                         <button
                           type="button"
-                          disabled={isSubmitting}
+                          disabled={isSubmitting || isPreparingPhotos}
                           onClick={() => handleAddPhotos('before', beforeFiles, () => setBeforeFiles([]))}
                           className="min-h-10 px-4 bg-brand hover:bg-brand-deep text-surface rounded-sm text-sm font-medium cursor-pointer disabled:opacity-50"
                         >
@@ -595,7 +618,7 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                           <button
                             type="submit"
                             form="completion-form"
-                            disabled={isSubmitting}
+                            disabled={isSubmitting || isPreparingPhotos}
                             className="min-h-11 px-4 justify-center bg-ok hover:bg-ok-deep text-surface rounded-sm text-sm font-medium flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                           >
                             <CheckCircle2 className="w-3.5 h-3.5" />
@@ -672,6 +695,7 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                             language={language}
                             t={t}
                             onError={setActionError}
+                            onBusyChange={setIsPreparingPhotos}
                           />
                         </div>
                       </form>
