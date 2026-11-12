@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canReopen,
   canTransition,
   computeKpi,
   formatTicketId,
@@ -64,6 +65,35 @@ describe('computeKpi', () => {
     expect(k.workMs).toBe(0);
     expect(liveWorkMs('reconocida', k.workMs, T0 + 10 * MIN, T0 + 20 * MIN)).toBe(10 * MIN);
   });
+
+  describe('after an admin reopens a completed request', () => {
+    const reopened: StatusEvent[] = [...workedExample, { toStatus: 'pendiente', atMs: T0 + 5 * H }];
+    const reworked: StatusEvent[] = [
+      ...reopened,
+      { toStatus: 'reconocida', atMs: T0 + 6 * H },
+      { toStatus: 'completada', atMs: T0 + 7 * H },
+    ];
+
+    it('has no total while reopened', () => {
+      const k = computeKpi(T0, 'normal', reopened, null);
+      expect(k.totalMs).toBeNull();
+      expect(k.workMs).toBe(1.5 * H);
+    });
+
+    it('adds the rework and the new wait, but not the time spent completed', () => {
+      expect(computeKpi(T0, 'normal', reworked, T0 + 7 * H)).toEqual({
+        responseMs: 1 * H,
+        responseSlaMet: true,
+        workMs: 2.5 * H,
+        blockedMs: 3 * H,
+        totalMs: 7 * H,
+      });
+    });
+
+    it('uses the latest completion when the stored time is absent', () => {
+      expect(computeKpi(T0, 'normal', reworked).totalMs).toBe(7 * H);
+    });
+  });
 });
 
 describe('liveWorkMs', () => {
@@ -82,6 +112,17 @@ describe('transitions', () => {
     expect(canTransition('sin_revisar', 'completada')).toBe(false);
     expect(canTransition('pendiente', 'completada')).toBe(false);
     expect(canTransition('completada', 'reconocida')).toBe(false);
+    expect(canTransition('completada', 'pendiente')).toBe(false);
+  });
+});
+
+describe('canReopen', () => {
+  it('allows only admins, and only on completed requests', () => {
+    expect(canReopen('admin', 'completada')).toBe(true);
+    expect(canReopen('supervisor', 'completada')).toBe(false);
+    expect(canReopen('staff', 'completada')).toBe(false);
+    expect(canReopen(undefined, 'completada')).toBe(false);
+    expect(canReopen('admin', 'reconocida')).toBe(false);
   });
 });
 

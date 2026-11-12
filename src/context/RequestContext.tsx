@@ -11,6 +11,7 @@ import {
   changeStatus as changeStatusOp,
   createRequestDoc,
   editRequestDetails as editRequestDetailsOp,
+  reopenRequest as reopenRequestOp,
   type RequestDetailsEdit,
   subscribeRequests,
   uploadPhotos,
@@ -46,11 +47,13 @@ interface RequestContextType {
     to: RequestStatus,
     opts?: { note?: string; resolutionNotes?: string; afterPhotoFiles?: File[] },
   ) => Promise<{ failedPhotos: string[] }>;
+  /** Admin: returns a completed request to pending. Photos are uploaded before the status changes. */
+  reopenRequest: (req: MaintenanceRequest, reason: string, photoFiles: File[]) => Promise<{ failedPhotos: string[] }>;
   /** Supervisor/admin: edit location, category, priority and assignee. Resolves false if nothing changed. */
   editDetails: (req: MaintenanceRequest, edit: RequestDetailsEdit) => Promise<boolean>;
   addNote: (reqId: string, note: string) => Promise<void>;
   deleteRequest: (reqId: string) => Promise<void>;
-  addPhotos: (req: MaintenanceRequest, kind: PhotoKind, files: File[]) => Promise<{ failedPhotos: string[] }>;
+  addPhotos: (req: MaintenanceRequest, kind: Exclude<PhotoKind, 'reopen'>, files: File[]) => Promise<{ failedPhotos: string[] }>;
   /** Active supervisors/admins (loaded for supervisors only) for reassignment and filters. */
   assignableSupervisors: AppUser[];
   isSubmitting: boolean;
@@ -166,6 +169,16 @@ export const RequestProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return { failedPhotos };
     });
 
+  const reopenRequest: RequestContextType['reopenRequest'] = (req, reason, photoFiles) =>
+    withSubmitting(async () => {
+      validatePhotos(photoFiles, req.reopenPhotos.length);
+      const a = actor();
+      // Storage only accepts reopen photos while the request is still completed.
+      const { uploaded, failed } = await uploadPhotos(storage(), a, req.id, 'reopen', photoFiles);
+      await reopenRequestOp(db(), a, req, reason, uploaded);
+      return { failedPhotos: failed };
+    });
+
 
   const editDetails: RequestContextType['editDetails'] = (req, edit) =>
     withSubmitting(() => editRequestDetailsOp(db(), actor(), req, edit));
@@ -245,6 +258,7 @@ export const RequestProvider: React.FC<{ children: React.ReactNode }> = ({ child
         resetFilters,
         createRequest,
         changeStatus,
+        reopenRequest,
         editDetails,
         addNote,
         deleteRequest,

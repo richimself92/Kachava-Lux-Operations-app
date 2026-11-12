@@ -44,7 +44,7 @@ export interface AssigneeRef {
   name: string;
 }
 
-export type PhotoKind = 'before' | 'after';
+export type PhotoKind = 'before' | 'after' | 'reopen';
 
 export interface PhotoAttachment {
   id: string;
@@ -131,6 +131,8 @@ export interface MaintenanceRequest {
 
   beforePhotos: PhotoAttachment[];
   afterPhotos: PhotoAttachment[];
+  /** Added by admins when reopening: what is still wrong. */
+  reopenPhotos: PhotoAttachment[];
 
   /** Written only by the backend KPI function. */
   kpi?: RequestKpi;

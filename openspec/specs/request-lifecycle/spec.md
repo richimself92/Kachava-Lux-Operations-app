@@ -29,7 +29,7 @@ Only these transitions SHALL be permitted:
 - `reconocida` to `pendiente`
 - `reconocida` to `completada`
 
-`completada` is final. The backend SHALL reject any other transition.
+`completada` is final, except that an admin MAY reopen it to `pendiente` (see Reopening a completed request). The backend SHALL reject any other transition.
 
 #### Scenario: Blocked work returns to pendiente
 - **WHEN** a supervisor moves a `reconocida` request to `pendiente` (e.g. waiting for parts)
@@ -39,8 +39,8 @@ Only these transitions SHALL be permitted:
 - **WHEN** a client attempts to move a request from `sin_revisar` or `pendiente` directly to `completada`
 - **THEN** the backend rejects the write
 
-#### Scenario: Reopening completed is rejected
-- **WHEN** a client attempts to change the state of a `completada` request
+#### Scenario: Other changes to a completed request are rejected
+- **WHEN** a client attempts to change the state of a `completada` request other than through an admin reopen
 - **THEN** the backend rejects the write
 
 ### Requirement: Who may change state
@@ -101,6 +101,27 @@ Moving a request to `completada` SHALL require a completion note. It MAY include
 #### Scenario: Missing completion note
 - **WHEN** a supervisor tries to complete a request without a note
 - **THEN** the form asks for the note and nothing is saved
+
+### Requirement: Reopening a completed request
+An admin SHALL be able to reopen a `completada` request whose work was not done correctly, moving it to `pendiente`. Reopening SHALL require a note on what is still wrong and MAY include photos, up to 5 per request across all reopens. The note SHALL be stored in the audit entry of the transition. The request's completion time, completing user and completion note SHALL be cleared, while the audit history keeps the previous completion and after-repair photos are kept. The most recent reopen note and all reopen photos SHALL be shown on the request to everyone who can view it. Supervisors and staff SHALL NOT reopen requests.
+
+A reopened request SHALL follow the normal lifecycle and MAY be completed again. It SHALL NOT count as completed while reopened. Work and blocked time SHALL include its periods after the reopen, and total time SHALL run from submission to the latest completion.
+
+#### Scenario: Admin reopens with note and photo
+- **WHEN** an admin reopens a `completada` request with a note and one photo
+- **THEN** the request shows state `pendiente`, the note and the photo, and the audit history shows both the earlier completion and the reopen
+
+#### Scenario: Reopen without a note rejected
+- **WHEN** an admin attempts to reopen a request with an empty or blank note
+- **THEN** the form asks for the note, and the backend rejects the write
+
+#### Scenario: Supervisor cannot reopen
+- **WHEN** a supervisor views a `completada` request or attempts to reopen it
+- **THEN** no reopen option is shown, and the backend rejects the write
+
+#### Scenario: Reopened request completed again
+- **WHEN** a reopened request moves through `reconocida` and is completed again
+- **THEN** it shows the new completion, and its work time includes the work from both before and after the reopen
 
 ### Requirement: Pending reason
 Moving a request to `pendiente` SHALL require the reason it cannot be completed yet. The reason field SHALL appear only after the supervisor chooses "Mark pending". The reason SHALL be stored in the audit entry of the transition, and the backend SHALL reject a move to `pendiente` without one.

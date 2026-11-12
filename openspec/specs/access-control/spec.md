@@ -51,7 +51,7 @@ All access decisions SHALL be enforced by the backend security rules, independen
 The system SHALL support exactly three roles:
 - **Staff**: create requests; view only their own requests.
 - **Supervisor**: everything Staff can do; view all requests; change status; assign; add notes and after-repair photos.
-- **Admin**: everything a Supervisor can do; manage approved users and roles; permanently delete requests.
+- **Admin**: everything a Supervisor can do; manage approved users and roles; permanently delete requests; reopen completed requests.
 
 #### Scenario: Staff visibility
 - **WHEN** a staff user opens the work orders list

@@ -8,6 +8,7 @@ import {
   PauseCircle,
   PlayCircle,
   Printer,
+  RotateCcw,
   ShieldCheck,
   Trash2,
   Upload,
@@ -15,6 +16,7 @@ import {
 } from 'lucide-react';
 import {
   ALLOWED_PHOTO_TYPES,
+  canReopen,
   isSupervisorRole,
   MAX_PHOTOS_PER_KIND,
   TRANSITIONS,
@@ -192,7 +194,7 @@ const PhotoGrid: React.FC<{ photos: PhotoAttachment[]; onOpen: (p: PhotoAttachme
 
 export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request, onClose }) => {
   const { currentUser, role, language } = useAuth();
-  const { changeStatus, addNote, addPhotos, isSubmitting } = useRequests();
+  const { changeStatus, reopenRequest, addNote, addPhotos, isSubmitting } = useRequests();
   const t = translations[language];
   const es = language === 'es';
 
@@ -209,6 +211,9 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
   const [beforeFiles, setBeforeFiles] = useState<PendingFile[]>([]);
   const [isPreparingPhotos, setIsPreparingPhotos] = useState(false);
   const [noteText, setNoteText] = useState('');
+  const [showReopenForm, setShowReopenForm] = useState(false);
+  const [reopenNote, setReopenNote] = useState('');
+  const [reopenFiles, setReopenFiles] = useState<PendingFile[]>([]);
 
   const reqId = request?.id;
   useEffect(() => {
@@ -225,6 +230,7 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
     () => () => {
       afterFiles.forEach((f) => URL.revokeObjectURL(f.previewUrl));
       beforeFiles.forEach((f) => URL.revokeObjectURL(f.previewUrl));
+      reopenFiles.forEach((f) => URL.revokeObjectURL(f.previewUrl));
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
@@ -238,6 +244,7 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
   const allowed = isSupervisor ? TRANSITIONS[request.status] : [];
   const canAddNote = isSupervisor ? isOpen : isSubmitter && request.status === 'sin_revisar';
   const canAddBeforePhotos = isSubmitter && request.status === 'sin_revisar' && request.beforePhotos.length < MAX_PHOTOS_PER_KIND;
+  const lastReopen = audit?.filter((a) => a.action === 'status_changed' && a.fromStatus === 'completada').at(-1);
 
   const run = async (fn: () => Promise<string | null>) => {
     setActionError(null);
@@ -292,7 +299,27 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
     });
   };
 
-  const handleAddPhotos = (kind: PhotoKind, files: PendingFile[], clear: () => void) =>
+  const closeReopenForm = () => {
+    reopenFiles.forEach((f) => URL.revokeObjectURL(f.previewUrl));
+    setReopenFiles([]);
+    setReopenNote('');
+    setShowReopenForm(false);
+  };
+
+  const handleReopen = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reopenNote.trim()) {
+      setActionError(t.reopenReasonRequired);
+      return;
+    }
+    return run(async () => {
+      const { failedPhotos } = await reopenRequest(request, reopenNote, reopenFiles.map((f) => f.file));
+      closeReopenForm();
+      return [t.reopenSuccess, failedText(failedPhotos)].filter(Boolean).join(' ');
+    });
+  };
+
+  const handleAddPhotos = (kind: Exclude<PhotoKind, 'reopen'>, files: PendingFile[], clear: () => void) =>
     run(async () => {
       const { failedPhotos } = await addPhotos(request, kind, files.map((f) => f.file));
       files.forEach((f) => URL.revokeObjectURL(f.previewUrl));
@@ -545,6 +572,28 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                   </div>
                 )}
 
+                {/* What was still wrong when an admin last reopened the ticket (everyone) */}
+                {(lastReopen || request.reopenPhotos.length > 0) && (
+                  <div className="border-l-2 border-plum px-3.5 py-3 text-sm space-y-2">
+                    <div className="font-semibold text-xs text-plum flex items-center gap-1.5">
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      {t.reopenedTitle}
+                    </div>
+                    {lastReopen && (
+                      <>
+                        <div className="text-xs text-muted">
+                          {lastReopen.by.name}
+                          {lastReopen.at ? ` · ${formatCancunDateTime(lastReopen.at, language)}` : ''}
+                        </div>
+                        <p className="text-ink whitespace-pre-wrap break-words">{lastReopen.details}</p>
+                      </>
+                    )}
+                    {request.reopenPhotos.length > 0 && (
+                      <PhotoGrid photos={request.reopenPhotos} onOpen={setLightboxPhoto} emptyText={t.noPhotosAttached} />
+                    )}
+                  </div>
+                )}
+
                 {/* Completed summary (everyone) */}
                 {request.status === 'completada' && (
                   <div className="bg-ok-wash/60 border-l-2 border-ok px-3.5 py-3 text-sm space-y-1.5 text-ok">
@@ -567,6 +616,71 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                       <Lock className="w-3 h-3" />
                       <span>{t.alreadyCompletedNotice}</span>
                     </div>
+                  </div>
+                )}
+
+                {/* Admin only: send a completed ticket back to pending */}
+                {canReopen(role, request.status) && (
+                  <div className="border-t-2 border-plum pt-4 print:hidden">
+                    {showReopenForm ? (
+                      <form onSubmit={handleReopen} className="border-l-2 border-plum pl-4 py-1 space-y-3">
+                        <div>
+                          <label htmlFor="reopen-reason" className="block text-xs font-semibold text-ink mb-1">
+                            {t.reopenReasonLabel} <span className="text-danger">*</span>
+                          </label>
+                          <textarea
+                            id="reopen-reason"
+                            rows={3}
+                            autoFocus
+                            value={reopenNote}
+                            onChange={(e) => setReopenNote(e.target.value)}
+                            placeholder={t.reopenReasonPlaceholder}
+                            maxLength={2000}
+                            required
+                            className="w-full bg-surface border border-line rounded-sm px-3 py-2.5 text-sm focus:outline-hidden focus:border-plum"
+                          />
+                        </div>
+                        <div>
+                          <span className="block text-xs font-semibold text-ink mb-1">{t.reopenPhotosLabel}</span>
+                          <PhotoPicker
+                            files={reopenFiles}
+                            setFiles={setReopenFiles}
+                            maxFiles={MAX_PHOTOS_PER_KIND - request.reopenPhotos.length}
+                            language={language}
+                            t={t}
+                            onError={setActionError}
+                            onBusyChange={setIsPreparingPhotos}
+                          />
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="submit"
+                            disabled={isSubmitting || isPreparingPhotos || !reopenNote.trim()}
+                            className="min-h-11 px-4 justify-center bg-plum hover:bg-plum-deep text-surface rounded-sm text-sm font-medium flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            {t.confirmReopen}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={closeReopenForm}
+                            disabled={isSubmitting}
+                            className="min-h-11 px-4 justify-center bg-surface hover:bg-wash border border-line rounded-sm text-xs font-medium cursor-pointer disabled:opacity-50"
+                          >
+                            {t.cancel}
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setShowReopenForm(true)}
+                        className="min-h-11 w-full sm:w-auto px-4 justify-center bg-surface hover:bg-wash border border-plum text-plum rounded-sm text-sm font-medium flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        {t.reopenAction}
+                      </button>
+                    )}
                   </div>
                 )}
 

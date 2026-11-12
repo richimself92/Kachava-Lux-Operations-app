@@ -158,7 +158,7 @@ Each request SHALL receive a unique, human-readable ticket ID in the format `KLM
 - **THEN** the user sees the assigned ticket ID once the backend assigns it, with a placeholder shown until then
 
 ### Requirement: Request photos
-A request SHALL accept up to 5 before-repair photos (from the submitter at creation) and up to 5 after-repair photos (from a supervisor or admin). Rules:
+A request SHALL accept up to 5 before-repair photos (from the submitter at creation), up to 5 after-repair photos (from a supervisor or admin), and up to 5 photos of what is still wrong (from an admin reopening it). Rules:
 - only JPG, PNG, or WebP
 - each photo at most 5 MB
 - photos are stored in Cloud Storage and referenced from the request

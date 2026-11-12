@@ -32,6 +32,10 @@ service firebase.storage {
       return isApproved() && firestore.get(userPath()).data.role in ['supervisor', 'admin'];
     }
 
+    function isAdmin() {
+      return isApproved() && firestore.get(userPath()).data.role == 'admin';
+    }
+
     function requestPath(reqId) {
       return /databases/(default)/documents/maintenanceRequests/$(reqId);
     }
@@ -61,6 +65,7 @@ service firebase.storage {
         && (
           (kind == 'before' && isSubmitter(reqId) && requestData(reqId).status == 'sin_revisar')
           || (kind == 'after' && isSupervisor() && requestData(reqId).status != 'completada')
+          || (kind == 'reopen' && isAdmin() && requestData(reqId).status == 'completada')
         );
 
       // Evidence is immutable.

@@ -255,6 +255,26 @@ service cloud.firestore {
                      || (d.supervisorNotes is string && d.supervisorNotes.size() <= 2000))));
     }
 
+    // --- Update action E: admin reopens a completed request back to pendiente ---
+    // The note saying what is still wrong lives in the audit entry; so does the previous completion.
+    function isReopen(reqId) {
+      let d = request.resource.data;
+      let e = resource.data;
+      return isAdmin()
+        && d.status == 'pendiente'
+        && changed().hasOnly(['status', 'statusChangedAt', 'statusChangedBy', 'updatedAt', 'lastAuditId',
+                              'completedAt', 'completedBy', 'supervisorNotes', 'reopenPhotos'])
+        && d.statusChangedAt == request.time
+        && isMe(d.statusChangedBy)
+        && auditPaired(reqId, ['status_changed'])
+        && pairedAudit(reqId).fromStatus == 'completada'
+        && pairedAudit(reqId).toStatus == 'pendiente'
+        && pairedAudit(reqId).details.trim().size() > 0
+        && !d.keys().hasAny(['completedAt', 'completedBy', 'supervisorNotes'])
+        && d.get('reopenPhotos', []).size() <= 5
+        && photosAppendOnly(e.get('reopenPhotos', []), d.get('reopenPhotos', []));
+    }
+
     // --- Update action C: supervisor/admin reassign, note, after photos (no state change) ---
     function isSupervisorEdit(reqId) {
       let d = request.resource.data;
@@ -287,7 +307,8 @@ service cloud.firestore {
     // branch is evaluated (keeps each request well under the 1000-expression rules limit).
     // A missing/invalid lastAuditId makes getAfter() fail, which denies the write.
     function updateAllowed(reqId, action) {
-      return (action == 'status_changed' && isStatusChange(reqId))
+      return (action == 'status_changed'
+                && (resource.data.status == 'completada' ? isReopen(reqId) : isStatusChange(reqId)))
         || (action == 'details_edited' && isDetailsEdit(reqId))
         || (action == 'reassigned' && isSupervisorEdit(reqId))
         || (action in ['note_added', 'photo_added'] && (isStaffEdit(reqId) || isSupervisorEdit(reqId)));

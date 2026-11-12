@@ -339,7 +339,8 @@ describe('lifecycle transitions', () => {
     );
   });
 
-  it('treats completada as final', async () => {
+  // Admin reopening is covered in reopen.test.ts; the bare admin write below omits its required fields.
+  it('treats completada as final outside an admin reopen', async () => {
     const id = await createRequestAs(env, USERS.staff);
     await toReconocida(id);
     const db = dbFor(env, USERS.sup);
