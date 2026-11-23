@@ -2,7 +2,7 @@
 
 Status as of **2026-11-23**. Covers OpenSpec change `firebase-backend-and-workflow` (archived), the
 follow-up UI/feature rounds (work-order edit/delete, MUJI redesign, phone photos, admin reopen) and the
-change `translate-ticket-comments` (implemented, not deployed, not archived yet).
+change `translate-ticket-comments` (implemented and archived on 2026-11-23, not deployed).
 
 ## 1. Where things are
 
@@ -14,7 +14,7 @@ change `translate-ticket-comments` (implemented, not deployed, not archived yet)
 | Firestore location | `nam5` → Cloud Functions in `us-central1` |
 | Auth | Microsoft (Entra ID, single tenant `kachavalux.com`) + `users/{email}` allowlist |
 | Deploy guide | [`docs/DEPLOYMENT.md`](DEPLOYMENT.md) |
-| Specs | `openspec/specs/` (access-control, maintenance-requests, request-lifecycle, operational-kpis); comment translation in `openspec/changes/translate-ticket-comments/` until archived |
+| Specs | `openspec/specs/` (access-control, maintenance-requests, request-lifecycle, operational-kpis, comment-translation); archived changes in `openspec/changes/archive/` |
 
 ## 2. Security rules
 
@@ -106,8 +106,7 @@ Fill in the ⏳ rows (date, account used, result) after the next production depl
    `roles/cloudtranslate.user` + `roles/datastore.user`, give the deployer `roles/iam.serviceAccountUser`,
    add `TRANSLATE_LOCATION` / `TRANSLATE_SERVICE_ACCOUNT` to `functions/.env.kachava-lux-ops`). If your
    gcloud has another project active, keep the two `export CLOUDSDK_*` lines at the top of that script.
-   Then deploy rules → functions → hosting and run checklist row 12. Not deployed yet. Archive the change
-   (`/opsx:archive`) after review so its specs move into `openspec/specs/`.
+   Then deploy rules → functions → hosting and run checklist row 12. Not deployed yet.
 4. Run the ⏳ rows of §5 and record the results here.
 5. Merge `design-improvements` into `main`, then `translation-service`, once the checklist passes.
 6. Rotate the Microsoft client secret before it expires (DEPLOYMENT §8).
