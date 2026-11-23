@@ -10,6 +10,6 @@ await build({
   outfile: 'lib/index.js',
   sourcemap: true,
   // Provided by functions/node_modules at runtime.
-  external: ['firebase-admin', 'firebase-admin/*', 'firebase-functions', 'firebase-functions/*'],
+  external: ['firebase-admin', 'firebase-admin/*', 'firebase-functions', 'firebase-functions/*', '@google-cloud/translate'],
   logLevel: 'info',
 });

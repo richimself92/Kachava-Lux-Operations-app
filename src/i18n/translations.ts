@@ -308,6 +308,15 @@ export const translations = {
     
     // Generic UI
     loading: 'Loading...',
+
+    // Machine translation of comments
+    machineTranslation: 'Machine translation',
+    viewOriginal: 'View original',
+    viewTranslation: 'View translation',
+    translating: 'Translating…',
+    translationFailed: 'Could not translate. Showing the original.',
+    translationBusy: 'Translation is busy right now. Try again later. Showing the original.',
+
     close: 'Close',
     save: 'Save',
     confirm: 'Confirm',
@@ -628,6 +637,15 @@ export const translations = {
     
     // Generic UI
     loading: 'Cargando...',
+
+    // Traducción automática de comentarios
+    machineTranslation: 'Traducción automática',
+    viewOriginal: 'Ver original',
+    viewTranslation: 'Ver traducción',
+    translating: 'Traduciendo…',
+    translationFailed: 'No se pudo traducir. Se muestra el original.',
+    translationBusy: 'El servicio de traducción está ocupado. Intente más tarde. Se muestra el original.',
+
     close: 'Cerrar',
     save: 'Guardar',
     confirm: 'Confirmar',

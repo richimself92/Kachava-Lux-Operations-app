@@ -38,13 +38,15 @@ import {
 } from '../lib/labels';
 import { auditActionLabel, auditDetailsText, auditRoleLabel } from '../lib/auditText';
 import { PhotoPrepError, preparePhotos } from '../lib/photoPrep';
-import { notesToHtml } from '../lib/richText';
 import { formatCancunDateTime } from '../lib/time';
 import { db } from '../services/firebase';
 import { PhotoValidationError, subscribeAudit } from '../services/requests';
+import { translatableComments } from '../services/translations';
+import { useCommentTranslations } from '../hooks/useCommentTranslations';
 import type { AuditLogEntry, Language, MaintenanceRequest, PhotoAttachment, PhotoKind } from '../types';
 import { PhotoLightbox, PhotoThumb } from './PhotoLightbox';
 import { TicketTimer } from './TicketTimer';
+import { TranslatableText } from './TranslatableText';
 
 interface RequestDetailModalProps {
   request: MaintenanceRequest | null;
@@ -235,6 +237,10 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
+
+  // User-typed text shown in the UI language (machine translation; originals stay the source of truth).
+  const comments = request ? translatableComments(request, audit) : [];
+  const translation = useCommentTranslations(reqId, comments, language);
 
   if (!request || !currentUser) return null;
 
@@ -437,7 +443,17 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                         </span>
                         <span className="font-mono text-[11px] whitespace-nowrap">{entry.at ? formatCancunDateTime(entry.at, language) : '…'}</span>
                       </div>
-                      {entry.details && <div className="text-ink whitespace-pre-wrap">{auditDetailsText(t, language, entry)}</div>}
+                      {entry.details &&
+                        (entry.action === 'note_added' || entry.action === 'status_changed' ? (
+                          <TranslatableText
+                            original={entry.details}
+                            outcome={translation({ kind: 'audit', id: entry.id }, entry.details)}
+                            t={t}
+                            className="text-ink whitespace-pre-wrap"
+                          />
+                        ) : (
+                          <div className="text-ink whitespace-pre-wrap">{auditDetailsText(t, language, entry)}</div>
+                        ))}
                       <div className="text-[11px] text-muted">
                         {entry.by.name} ({auditRoleLabel(entry.by.role, language)})
                       </div>
@@ -486,10 +502,15 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                   )}
                   <div>
                     <span className="kl-label block">{t.notesLabel}</span>
-                    <div
-                      className="rich-text text-ink mt-1.5 text-[15px] leading-[1.75] break-words"
-                      dangerouslySetInnerHTML={{ __html: notesToHtml(request.notes) }}
-                    />
+                    <div className="mt-1.5">
+                      <TranslatableText
+                        html
+                        original={request.notes}
+                        outcome={translation({ kind: 'description' }, request.notes)}
+                        t={t}
+                        className="rich-text text-ink text-[15px] leading-[1.75] break-words"
+                      />
+                    </div>
                   </div>
                   <div className="pt-3 border-t border-line flex flex-wrap gap-x-4 gap-y-1 justify-between text-xs text-muted">
                     <span>
@@ -585,7 +606,12 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                           {lastReopen.by.name}
                           {lastReopen.at ? ` · ${formatCancunDateTime(lastReopen.at, language)}` : ''}
                         </div>
-                        <p className="text-ink whitespace-pre-wrap break-words">{lastReopen.details}</p>
+                        <TranslatableText
+                          original={lastReopen.details}
+                          outcome={translation({ kind: 'audit', id: lastReopen.id }, lastReopen.details)}
+                          t={t}
+                          className="text-ink whitespace-pre-wrap break-words"
+                        />
                       </>
                     )}
                     {request.reopenPhotos.length > 0 && (
@@ -608,8 +634,14 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                       </div>
                     )}
                     {request.supervisorNotes && (
-                      <div className="pt-1 border-t border-ok-line text-ink whitespace-pre-wrap">
-                        <strong>{t.supervisorNotesLabel}:</strong> {request.supervisorNotes}
+                      <div className="pt-1 border-t border-ok-line text-ink">
+                        <strong>{t.supervisorNotesLabel}:</strong>
+                        <TranslatableText
+                          original={request.supervisorNotes}
+                          outcome={translation({ kind: 'supervisorNotes' }, request.supervisorNotes)}
+                          t={t}
+                          className="whitespace-pre-wrap"
+                        />
                       </div>
                     )}
                     <div className="text-[10px] text-muted pt-0.5 flex items-center gap-1">

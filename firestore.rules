@@ -369,6 +369,12 @@ service cloud.firestore {
 
         allow update, delete: if false;
       }
+
+      // Cached machine translations of comments: written and read only by the
+      // translateComments function (Admin SDK). Clients get them through that function.
+      match /translations/{translationId} {
+        allow read, write: if false;
+      }
     }
 
     // Ticket counters: Cloud Functions (Admin SDK) only.

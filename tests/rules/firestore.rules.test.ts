@@ -166,6 +166,25 @@ describe('visibility', () => {
 
     await assertSucceeds(getDocs(collection(dbFor(env, USERS.sup), 'maintenanceRequests')));
   });
+
+  it('cached translations are not readable or writable by any client', async () => {
+    const id = await createRequestAs(env, USERS.staff);
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'maintenanceRequests', id, 'translations', 'description_en'), {
+        sourceHash: 'h',
+        status: 'translated',
+        text: 't',
+      });
+    });
+    for (const u of [USERS.staff, USERS.sup, USERS.admin]) {
+      const db = dbFor(env, u);
+      const ref = doc(db, 'maintenanceRequests', id, 'translations', 'description_en');
+      await assertFails(getDoc(ref));
+      await assertFails(getDocs(collection(db, 'maintenanceRequests', id, 'translations')));
+      await assertFails(setDoc(ref, { sourceHash: 'x', status: 'translated', text: 'forged' }));
+      await assertFails(deleteDoc(ref));
+    }
+  });
 });
 
 describe('request creation', () => {
