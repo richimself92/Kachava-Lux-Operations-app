@@ -1,19 +1,20 @@
 # Handoff — Kachava Lux Maintenance
 
-Status as of **2026-11-06**. Covers OpenSpec change `firebase-backend-and-workflow` (archived) and the
-follow-up UI/feature rounds done in the same session.
+Status as of **2026-11-23**. Covers OpenSpec change `firebase-backend-and-workflow` (archived), the
+follow-up UI/feature rounds (work-order edit/delete, MUJI redesign, phone photos, admin reopen) and the
+change `translate-ticket-comments` (implemented, not deployed, not archived yet).
 
 ## 1. Where things are
 
 | Item | Value |
 | --- | --- |
-| Repository | https://github.com/richimself92/Kachava-Lux-Operations-app (branch `spec-backend`, not yet merged to `main`) |
+| Repository | https://github.com/richimself92/Kachava-Lux-Operations-app (`spec-backend` is merged into `main`; `design-improvements` (redesign, photos, admin reopen) is ahead of `main`; comment translation is on `translation-service`, built on top of `design-improvements`) |
 | Production URL | https://kachava-lux-ops.web.app |
 | Firebase project ID | `kachava-lux-ops` (project number 146497773004), Blaze plan |
 | Firestore location | `nam5` → Cloud Functions in `us-central1` |
 | Auth | Microsoft (Entra ID, single tenant `kachavalux.com`) + `users/{email}` allowlist |
 | Deploy guide | [`docs/DEPLOYMENT.md`](DEPLOYMENT.md) |
-| Specs | `openspec/specs/` (access-control, maintenance-requests, request-lifecycle, operational-kpis) |
+| Specs | `openspec/specs/` (access-control, maintenance-requests, request-lifecycle, operational-kpis); comment translation in `openspec/changes/translate-ticket-comments/` until archived |
 
 ## 2. Security rules
 
@@ -21,10 +22,16 @@ follow-up UI/feature rounds done in the same session.
 - The first production release deployed rules, functions and hosting (done by the owner; sign-in with
   Microsoft, creating and editing a request were confirmed working).
 - **Pending:** the latest rules (admin-only request deletion, new facilities, optional legacy location detail,
-  10,000-char rich-text notes, required pending reason, supervisor detail edits — location, category, priority, supervisor) and functions (default supervisor, cleanup on delete, ticket backfill, SLA recompute on priority change) are **not
+  10,000-char rich-text notes, required pending reason, supervisor detail edits — location, category, priority,
+  supervisor — admin reopen of completed requests with reopen photos, explicit client deny on
+  `maintenanceRequests/{id}/translations`) and functions (default supervisor, cleanup on delete including
+  cached translations, ticket backfill, SLA recompute on priority change, `translateComments`) are **not
   deployed yet**. Deploy order in §6 below.
-- Automated coverage: 57 rules tests (Firestore + Storage + client service), 13 functions tests, 59 unit tests — all passing on
-  2026-11-06.
+- Automated coverage: 104 rules tests (Firestore + Storage + client service + photo uploads per role + reopen),
+  42 functions tests (triggers + comment translation), 93 unit tests — all passing on 2026-11-23.
+  `npm run test:rules` / `test:functions` need a HotSpot JDK; a pre-check (`scripts/check-java.mjs`) stops
+  with instructions when the `java` on PATH is OpenJ9 (IBM Semeru), which otherwise fails with
+  `{"error":{"code":500,"status":"UNKNOWN"}}`.
 
 ## 3. Users and roles
 
@@ -52,6 +59,11 @@ Seeded from `scripts/initial-roster.json`; afterwards managed in the app (Person
 - **Request deletion:** the original design kept every record forever. Admins can now permanently delete a
   request; its audit history and photos are removed with it. There is no record of who deleted it beyond the
   function log (request ID + ticket ID).
+- **Reopening completed requests:** the original lifecycle made `completada` final. Admins can now reopen a
+  completed request back to `pendiente` with a required note and up to 5 photos; the previous completion stays
+  in the audit history and KPI work time continues.
+- **Comment translation** (not in the URD): user-typed text is machine-translated to the selected UI language
+  on demand (Cloud Translation v3); originals are stored unchanged and always one click away.
 - **Default supervisor:** every new request is assigned to Randel (`DEFAULT_ASSIGNEE_EMAIL`). Supervisors
   therefore no longer become the assignee automatically on first handling unless the default could not be applied.
 
@@ -69,9 +81,11 @@ Legend: ✅ confirmed on production · 🧪 verified on the local emulators only
 | 6 | Data persists after logout / refresh / another device | ✅ request editable after sign-in (owner); ⏳ second device |
 | 7 | Non-allowlisted tenant user sees "Not authorized" and reads are denied | 🧪 (rules tests) |
 | 8 | Dashboard filters reflect real records | 🧪 |
-| 9 | Whole flow on an iPhone | ⏳ |
+| 9 | Whole flow on an iPhone, including a camera photo over 5 MB | ⏳ |
 | 10 | Default supervisor = Randel on new requests | 🧪 |
 | 11 | Only admins see/use delete; history and photos removed | 🧪 |
+| 12 | Comment translation: a Spanish note shows in English with "Machine translation · View original"; in ES it shows as written (DEPLOYMENT §6.5) | 🧪 (emulators, fake translator) · ⏳ with Cloud Translation |
+| 13 | Admin reopens a completed request with a note and a photo; it returns to `pendiente` and the earlier completion stays in the history | 🧪 (rules tests) |
 
 Fill in the ⏳ rows (date, account used, result) after the next production deploy.
 
@@ -87,8 +101,16 @@ Fill in the ⏳ rows (date, account used, result) after the next production depl
    npm run build && npx firebase deploy --only hosting
    ```
    Requests created before this deploy keep their state; the ticket backfill assigns missing IDs on their next update.
-3. Run the ⏳ rows of §5 and record the results here.
-4. Merge `spec-backend` into `main` once the checklist passes.
-5. Rotate the Microsoft client secret before it expires (DEPLOYMENT §8).
-6. Known limitations: no "recompute KPIs" admin action; orphan Storage objects from failed uploads are not
-   cleaned up; deletion is permanent with no undo.
+3. **Comment translation (change `translate-ticket-comments`)**: before the next functions deploy, run the
+   one-time setup in `docs/DEPLOYMENT.md` §9 (enable `translate.googleapis.com`, create `translate-fn`, grant
+   `roles/cloudtranslate.user` + `roles/datastore.user`, give the deployer `roles/iam.serviceAccountUser`,
+   add `TRANSLATE_LOCATION` / `TRANSLATE_SERVICE_ACCOUNT` to `functions/.env.kachava-lux-ops`). If your
+   gcloud has another project active, keep the two `export CLOUDSDK_*` lines at the top of that script.
+   Then deploy rules → functions → hosting and run checklist row 12. Not deployed yet. Archive the change
+   (`/opsx:archive`) after review so its specs move into `openspec/specs/`.
+4. Run the ⏳ rows of §5 and record the results here.
+5. Merge `design-improvements` into `main`, then `translation-service`, once the checklist passes.
+6. Rotate the Microsoft client secret before it expires (DEPLOYMENT §8).
+7. Known limitations: no "recompute KPIs" admin action; orphan Storage objects from failed uploads are not
+   cleaned up; deletion is permanent with no undo; translations are shown only in the request detail (not in
+   lists or previews), and the language switch is not reachable while a request is open.

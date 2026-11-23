@@ -10,6 +10,7 @@ import {
   type Auth,
 } from 'firebase/auth';
 import { connectFirestoreEmulator, initializeFirestore, type Firestore } from 'firebase/firestore';
+import { connectFunctionsEmulator, getFunctions, type Functions } from 'firebase/functions';
 import { connectStorageEmulator, getStorage, type FirebaseStorage } from 'firebase/storage';
 
 const env = import.meta.env;
@@ -30,6 +31,9 @@ const config = {
 };
 
 const msTenantId: string = env.VITE_MS_TENANT_ID || '';
+
+/** Region of the callable functions (translateComments); must match the functions' LOCATION. */
+const functionsRegion: string = env.VITE_FUNCTIONS_REGION || 'us-central1';
 
 function findMissingConfig(): string[] {
   const required: Record<string, string> = usingEmulators
@@ -58,6 +62,7 @@ let app: FirebaseApp | null = null;
 let authInstance: Auth | null = null;
 let dbInstance: Firestore | null = null;
 let storageInstance: FirebaseStorage | null = null;
+let functionsInstance: Functions | null = null;
 
 if (configError) {
   console.error(configError);
@@ -66,11 +71,13 @@ if (configError) {
   authInstance = getAuth(app);
   dbInstance = initializeFirestore(app, { ignoreUndefinedProperties: true });
   storageInstance = getStorage(app);
+  functionsInstance = getFunctions(app, functionsRegion);
 
   if (usingEmulators) {
     connectAuthEmulator(authInstance, 'http://127.0.0.1:9098', { disableWarnings: true });
     connectFirestoreEmulator(dbInstance, '127.0.0.1', 8085);
     connectStorageEmulator(storageInstance, '127.0.0.1', 9198);
+    connectFunctionsEmulator(functionsInstance, '127.0.0.1', 5002);
     console.warn('Using local Firebase emulators.');
   }
 }
@@ -83,6 +90,7 @@ function required<T>(value: T | null, name: string): T {
 export const auth = (): Auth => required(authInstance, 'Auth');
 export const db = (): Firestore => required(dbInstance, 'Firestore');
 export const storage = (): FirebaseStorage => required(storageInstance, 'Storage');
+export const functions = (): Functions => required(functionsInstance, 'Functions');
 
 function microsoftProvider(): OAuthProvider {
   const provider = new OAuthProvider('microsoft.com');

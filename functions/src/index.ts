@@ -5,6 +5,8 @@ import { logger } from 'firebase-functions';
 import { defineString } from 'firebase-functions/params';
 import { setGlobalOptions } from 'firebase-functions/v2';
 import { onDocumentCreated, onDocumentDeleted, onDocumentUpdated } from 'firebase-functions/v2/firestore';
+import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { googleTranslator } from './googleTranslator';
 import {
   assignDefaultSupervisor,
   assignTicketId,
@@ -12,6 +14,14 @@ import {
   purgeRequestArtifacts,
   recomputeKpi,
 } from './logic';
+import {
+  fakeTranslator,
+  TranslateError,
+  translateComments as translateCommentsLogic,
+  translationLogEntry,
+  type TranslateStats,
+  type Translator,
+} from './translate';
 
 initializeApp();
 const db = getFirestore();
@@ -30,6 +40,19 @@ setGlobalOptions({ region: LOCATION, maxInstances: 10 });
  * as DEFAULT_ASSIGNEE_EMAIL=...). Empty disables default assignment.
  */
 const DEFAULT_ASSIGNEE_EMAIL = defineString('DEFAULT_ASSIGNEE_EMAIL', { default: 'randel@kachavalux.com' });
+
+/**
+ * Cloud Translation location: `global` (default) or `us-central1` to keep processing in the
+ * US region next to Firestore (nam5) and the functions.
+ */
+const TRANSLATE_LOCATION = defineString('TRANSLATE_LOCATION', { default: 'global' });
+
+/**
+ * Runtime identity of translateComments only (the triggers keep the default account).
+ * `translate-fn@` is shorthand for translate-fn@<project>.iam.gserviceaccount.com.
+ * Needs roles/cloudtranslate.user and roles/datastore.user — see docs/DEPLOYMENT.md.
+ */
+const TRANSLATE_SERVICE_ACCOUNT = defineString('TRANSLATE_SERVICE_ACCOUNT', { default: 'translate-fn@' });
 
 /** Assigns the server-side sequential ticket id (KLM-YYYY-NNNN) and the default supervisor. */
 export const onMaintenanceRequestCreated = onDocumentCreated('maintenanceRequests/{reqId}', async (event) => {
@@ -78,3 +101,41 @@ export const onMaintenanceRequestDeleted = onDocumentDeleted('maintenanceRequest
   if (photosError) logger.error('could not delete request photos', { reqId, error: String(photosError) });
   logger.info('request deleted; artifacts purged', { reqId, ticketId: event.data?.data()?.ticketId ?? null });
 });
+
+const usingEmulator = process.env.FUNCTIONS_EMULATOR === 'true';
+let translator: Translator | null = null;
+
+/**
+ * Translates a request's user-typed text (description, completion notes, note / status-change
+ * audit details) into `es` or `en` with Cloud Translation v3. The client sends references; the
+ * originals are read here and never modified. Only metadata is logged — never comment text.
+ */
+export const translateComments = onCall(
+  {
+    serviceAccount: TRANSLATE_SERVICE_ACCOUNT,
+    maxInstances: 5,
+    timeoutSeconds: 30,
+    memory: '256MiB',
+  },
+  async (request) => {
+    const started = Date.now();
+    const target = typeof request.data?.target === 'string' ? request.data.target.slice(0, 5) : null;
+    translator ??= usingEmulator
+      ? fakeTranslator
+      : googleTranslator(process.env.GCLOUD_PROJECT ?? '', TRANSLATE_LOCATION.value());
+    let stats: TranslateStats | null = null;
+    try {
+      const out = await translateCommentsLogic(db, request.auth, request.data, translator, {
+        location: usingEmulator ? 'emulator' : TRANSLATE_LOCATION.value(),
+      });
+      stats = out.stats;
+      logger.info('translateComments', translationLogEntry(target, stats, Date.now() - started, 'ok'));
+      return { results: out.results };
+    } catch (err) {
+      const code = err instanceof TranslateError ? err.code : 'internal';
+      logger.warn('translateComments', translationLogEntry(target, stats, Date.now() - started, 'error', code));
+      if (err instanceof TranslateError) throw new HttpsError(err.code, err.message);
+      throw new HttpsError('internal', 'Translation failed');
+    }
+  },
+);

@@ -16,7 +16,7 @@ steps 4–8 repeat for each release (skip the seed step once the roster exists).
 | Node.js 22 | app build, functions runtime | `node -v` |
 | Firebase CLI ≥ 14 | deploys | `npx firebase --version` |
 | Google Cloud SDK | seeding the allowlist (Application Default Credentials) | `gcloud --version` |
-| Temurin/HotSpot JDK 21 | **only** for local emulators/tests, not needed to deploy | `java -version` |
+| Temurin/HotSpot JDK 21 | **only** for local emulators/tests, not needed to deploy. OpenJ9 builds (IBM Semeru) crash the Firestore emulator | `java -version` must not say OpenJ9 |
 
 Accounts you need:
 - A Google account with **Owner** (or Firebase Admin + Service Usage Admin) on `kachava-lux-ops`.
@@ -136,7 +136,7 @@ Run the checks first:
 
 ```bash
 npm run lint && npm test
-npm run test:rules && npm run test:functions   # need the JDK
+npm run test:rules && npm run test:functions   # need a HotSpot JDK; both stop early with instructions if `java` is OpenJ9
 ```
 
 Then deploy in this order (each step depends on the previous one):
@@ -149,9 +149,10 @@ On the first Storage deploy the CLI asks to grant the Storage service agent perm
 Firestore (the Storage rules look up `users/{email}`). Answer **yes**.
 
 ```bash
-# b) Cloud Functions (ticket IDs, default supervisor, KPI recomputation, cleanup on delete)
+# b) Cloud Functions (ticket IDs, default supervisor, KPI recomputation, cleanup on delete,
+#    comment translation — do §9 first, once)
 npx firebase deploy --only functions
-npx firebase functions:list   # expect onMaintenanceRequestCreated, onMaintenanceRequestUpdated, onMaintenanceRequestDeleted
+npx firebase functions:list   # expect onMaintenanceRequestCreated, onMaintenanceRequestUpdated, onMaintenanceRequestDeleted, translateComments
 ```
 
 Function parameters (the CLI asks for them on the first deploy and saves the answers in
@@ -161,6 +162,9 @@ Function parameters (the CLI asks for them on the first deploy and saves the ans
 | --- | --- | --- |
 | `LOCATION` | `us-central1` | Region; must match the Firestore location (`nam5` → `us-central1`). |
 | `DEFAULT_ASSIGNEE_EMAIL` | `randel@kachavalux.com` | Supervisor assigned to every new request. Must be an active supervisor/admin in `users`; otherwise requests stay unassigned. |
+| `TRANSLATE_LOCATION` | `global` | Cloud Translation location (`global`, or `us-central1` to keep processing in the US region). See §9. |
+| `TRANSLATE_SERVICE_ACCOUNT` | `translate-fn@` | Runtime service account of `translateComments` only (`translate-fn@kachava-lux-ops.iam.gserviceaccount.com`). It must exist before the deploy. See §9. |
+
 First deploy enables Cloud Functions, Cloud Build, Artifact Registry, Eventarc, Cloud Run and
 Pub/Sub. If it fails with an Eventarc/service-agent permission error, wait 2–3 minutes and
 re-run — new service agents take a moment to propagate.
@@ -213,6 +217,9 @@ Open https://kachava-lux-ops.web.app — you should see only **Sign in with Micr
    timer runs; Mark pending → timer pauses; Resume → Complete with notes + photo.
 3. Dashboard KPIs update; the ticket shows response / work / total times.
 4. A Microsoft account that is not on the roster sees **Not authorized**.
+5. Comment translation: with the app in **EN**, open a request whose note was written in Spanish →
+   the note shows in English with "Machine translation · View original"; "View original" shows the
+   Spanish text. Switch to **ES** (close the request first) → the same note shows as written.
 
 The full URD §9 checklist and its results go in `docs/HANDOFF.md`.
 
@@ -226,6 +233,7 @@ The full URD §9 checklist and its results go in `docs/HANDOFF.md`.
 | Firestore / Storage rules | Console › Firestore (or Storage) › **Rules** › history › pick previous ruleset › Publish. Or check out the previous commit and redeploy step 5a. |
 | Indexes | Redeploy from the previous commit. Removing an index is not destructive to data. |
 | Functions | Check out the previous commit and `npx firebase deploy --only functions`. |
+| Comment translation | Roll back Hosting first (the UI stops calling it), then `npx firebase functions:delete translateComments --region us-central1 --force` if needed. Originals are never modified, so there is nothing to restore; cached translations under `maintenanceRequests/*/translations` are inert. |
 | Allowlist | Deactivate/reactivate users in the app (Staff Roster). The seed script never deletes. |
 
 Data is never deleted by a deploy. Deleting a request (admin only, in the app) is permanent:
@@ -242,4 +250,78 @@ change, so a functions rollback does not lose information.
   Authentication › Microsoft, then delete the old secret.
 - **Logs:** `npx firebase functions:log` or Cloud Console › Logging.
 - **Costs:** Blaze plan; at this volume usage stays within the free tier. Consider a budget alert
-  in Cloud Billing.
+  in Cloud Billing. Cloud Translation is billed per character translated (cache hits and comments
+  already in the selected language cost nothing).
+- **Translation logs:** `translateComments` logs only the target language, counts, duration and
+  outcome — never comment text. Filter by `message="translateComments"` in Logging.
+
+---
+
+## 9. Comment translation (Cloud Translation v3) — one-time setup
+
+`translateComments` (a callable 2nd-gen function, i.e. a Cloud Run service) translates ticket
+comments with **Cloud Translation Advanced (v3)** using **Application Default Credentials** of a
+dedicated service account. There is **no API key and no service-account key file**: do not create
+one, and do not put any translation credential in `.env*` files or in the repository.
+
+Run once, before the first functions deploy that includes `translateComments` (bash; on Windows
+use Git Bash or WSL):
+
+> **Several gcloud projects on one machine?** `--project` only changes the target project, not
+> the *quota project* that Google bills API calls to. If your active gcloud configuration has
+> `billing/quota_project` set to another project, these commands fail with
+> `PERMISSION_DENIED … USER_PROJECT_DENIED` naming that other project. The two `export` lines
+> at the top of the script override the project and quota project **for the current terminal
+> only**. Your active configuration is not changed, and other terminals are not affected.
+> Alternatives: add `--billing-project="$P"` to each command, or, if you keep a gcloud
+> configuration for this project, use `export CLOUDSDK_ACTIVE_CONFIG_NAME=<that-config>`.
+> Check what gcloud will use with `gcloud config list`.
+
+```bash
+P="kachava-lux-ops"
+SA="translate-fn@${P}.iam.gserviceaccount.com"
+DEPLOYER="<deployer-email>"   # the Google account that runs `firebase deploy`
+
+# 0. Use this project for this terminal only (see the note above)
+export CLOUDSDK_CORE_PROJECT="$P"
+export CLOUDSDK_BILLING_QUOTA_PROJECT="$P"
+
+# 1. Enable the API
+gcloud services enable translate.googleapis.com --project "$P"
+
+# 2. Dedicated runtime identity for translateComments only (the triggers keep the default account)
+gcloud iam service-accounts create translate-fn --project "$P" \
+  --display-name "Kachava Lux - comment translation"
+
+# 3. Minimum runtime roles
+gcloud projects add-iam-policy-binding "$P" --member="serviceAccount:${SA}" --role="roles/cloudtranslate.user"  # call Translation v3
+gcloud projects add-iam-policy-binding "$P" --member="serviceAccount:${SA}" --role="roles/datastore.user"       # read requests/users, read+write the translation cache
+
+# 4. Let the person who deploys attach that service account to the function
+gcloud iam service-accounts add-iam-policy-binding "$SA" --project "$P" \
+  --member="user:${DEPLOYER}" --role="roles/iam.serviceAccountUser"
+```
+
+Then add to `functions/.env.kachava-lux-ops`:
+
+```
+TRANSLATE_LOCATION=global
+TRANSLATE_SERVICE_ACCOUNT=translate-fn@
+```
+
+Notes:
+- `roles/cloudtranslate.user` is the narrowest predefined role that can call `translateText`.
+  `roles/datastore.user` is project-wide, as Firestore has no per-collection IAM; the function
+  itself only reads `users`, `maintenanceRequests` (+ `audit`) and writes `.../translations`.
+- Callable functions are publicly invocable at the Cloud Run level (Firebase manages
+  `run.invoker`); the function checks the Firebase ID token, the `@kachavalux.com` Microsoft
+  identity, the active allowlist entry and the request's read permission before doing anything.
+- The frontend needs no new secret. Optional `VITE_FUNCTIONS_REGION` (default `us-central1`)
+  in `.env.production` must match `LOCATION`.
+- **Secrets, if one is ever needed** (Translation does not need any): store it in Secret Manager
+  with `npx firebase functions:secrets:set NAME`, declare it with `defineSecret('NAME')` from
+  `firebase-functions/params` and list it in that function's `secrets: [...]` option, so it is
+  injected only into that function. Grant `roles/secretmanager.secretAccessor` **on that secret
+  only** to the function's service account, never project-wide:
+  `gcloud secrets add-iam-policy-binding NAME --project "$P" --member="serviceAccount:${SA}" --role="roles/secretmanager.secretAccessor"`.
+- Deploy order stays §5: rules (the explicit deny on `translations`) → functions → hosting.

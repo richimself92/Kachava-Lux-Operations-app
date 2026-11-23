@@ -24,11 +24,13 @@ import {
 import { ref as storageRef, uploadBytes, type FirebaseStorage } from 'firebase/storage';
 import {
   ALLOWED_PHOTO_TYPES,
+  canReopen,
   canTransition,
   findLocation,
   INITIAL_STATUS,
   MAX_PHOTO_BYTES,
   MAX_PHOTOS_PER_KIND,
+  REOPEN_STATUS,
   type CommonAreaSubLocation,
   type MaintenanceCategory,
   type RequestPriority,
@@ -95,6 +97,7 @@ export function toRequest(id: string, d: DocumentData): MaintenanceRequest {
     assignedTo: d.assignedTo ?? null,
     beforePhotos: toPhotos(d.beforePhotos),
     afterPhotos: toPhotos(d.afterPhotos),
+    reopenPhotos: toPhotos(d.reopenPhotos),
     kpi: d.kpi
       ? {
           responseMs: d.kpi.responseMs ?? null,
@@ -288,7 +291,7 @@ export async function attachPhotos(
   db: Firestore,
   actor: Actor,
   req: Pick<MaintenanceRequest, 'id' | 'beforePhotos' | 'afterPhotos'>,
-  kind: PhotoKind,
+  kind: Exclude<PhotoKind, 'reopen'>,
   photos: PhotoAttachment[],
 ): Promise<void> {
   if (photos.length === 0) return;
@@ -350,6 +353,37 @@ export async function changeStatus(
     action: 'status_changed',
     fromStatus: req.status,
     toStatus: to,
+    details: details.slice(0, 2000),
+  }).commit();
+}
+
+/**
+ * Admin: returns a completed request to pending because the work was not done correctly.
+ * Clears the completion record from the request; the audit history keeps the previous completion.
+ */
+export async function reopenRequest(
+  db: Firestore,
+  actor: Actor,
+  req: MaintenanceRequest,
+  reason: string,
+  photos: PhotoAttachment[] = [],
+): Promise<void> {
+  if (!canReopen(actor.role, req.status)) throw new Error('Only admins can reopen a completed request');
+  const details = reason.trim();
+  if (!details) throw new Error('A reason is required to reopen a request');
+  const changes: Record<string, unknown> = {
+    status: REOPEN_STATUS,
+    statusChangedAt: serverTimestamp(),
+    statusChangedBy: personRef(actor),
+    completedAt: deleteField(),
+    completedBy: deleteField(),
+    supervisorNotes: deleteField(),
+  };
+  if (photos.length > 0) changes.reopenPhotos = [...req.reopenPhotos, ...photos].map(photoRecord);
+  await pairedBatch(db, actor, req.id, changes, {
+    action: 'status_changed',
+    fromStatus: req.status,
+    toStatus: REOPEN_STATUS,
     details: details.slice(0, 2000),
   }).commit();
 }

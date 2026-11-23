@@ -30,7 +30,7 @@ export type RequestStatus = (typeof STATUSES)[number];
 
 export const INITIAL_STATUS: RequestStatus = 'sin_revisar';
 
-/** Allowed state transitions. `completada` is terminal. */
+/** Allowed workflow transitions. Leaving `completada` is only possible by reopening (see canReopen). */
 export const TRANSITIONS: Readonly<Record<RequestStatus, readonly RequestStatus[]>> = {
   sin_revisar: ['pendiente', 'reconocida'],
   pendiente: ['reconocida'],
@@ -40,6 +40,14 @@ export const TRANSITIONS: Readonly<Record<RequestStatus, readonly RequestStatus[
 
 export function canTransition(from: RequestStatus, to: RequestStatus): boolean {
   return TRANSITIONS[from].includes(to);
+}
+
+/** Status a reopened request returns to. */
+export const REOPEN_STATUS: RequestStatus = 'pendiente';
+
+/** Admins may reopen a completed request whose work was not done correctly. */
+export function canReopen(role: Role | undefined | null, status: RequestStatus): boolean {
+  return role === 'admin' && status === 'completada';
 }
 
 // ---------------------------------------------------------------------------
@@ -187,10 +195,8 @@ export function computeKpi(
     }
     current = ev.toStatus;
     segmentStart = ev.atMs;
-    if (current === 'completada') {
-      completionAt = ev.atMs;
-      break;
-    }
+    // Not a stop condition: a reopened request has events after its first completion.
+    if (current === 'completada') completionAt = ev.atMs;
   }
 
   const end = completedAtMs ?? completionAt;

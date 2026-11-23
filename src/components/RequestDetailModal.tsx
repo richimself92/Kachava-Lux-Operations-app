@@ -8,6 +8,7 @@ import {
   PauseCircle,
   PlayCircle,
   Printer,
+  RotateCcw,
   ShieldCheck,
   Trash2,
   Upload,
@@ -15,8 +16,8 @@ import {
 } from 'lucide-react';
 import {
   ALLOWED_PHOTO_TYPES,
+  canReopen,
   isSupervisorRole,
-  MAX_PHOTO_BYTES,
   MAX_PHOTOS_PER_KIND,
   TRANSITIONS,
 } from '../../shared/domain';
@@ -36,13 +37,16 @@ import {
   type Dict,
 } from '../lib/labels';
 import { auditActionLabel, auditDetailsText, auditRoleLabel } from '../lib/auditText';
-import { notesToHtml } from '../lib/richText';
+import { PhotoPrepError, preparePhotos } from '../lib/photoPrep';
 import { formatCancunDateTime } from '../lib/time';
 import { db } from '../services/firebase';
 import { PhotoValidationError, subscribeAudit } from '../services/requests';
+import { translatableComments } from '../services/translations';
+import { useCommentTranslations } from '../hooks/useCommentTranslations';
 import type { AuditLogEntry, Language, MaintenanceRequest, PhotoAttachment, PhotoKind } from '../types';
 import { PhotoLightbox, PhotoThumb } from './PhotoLightbox';
 import { TicketTimer } from './TicketTimer';
+import { TranslatableText } from './TranslatableText';
 
 interface RequestDetailModalProps {
   request: MaintenanceRequest | null;
@@ -70,24 +74,40 @@ const PhotoPicker: React.FC<{
   language: Language;
   t: Dict;
   onError: (msg: string | null) => void;
-  /** Rendered at the right end of the camera/files row (e.g. a submit button). */
-}> = ({ files, setFiles, maxFiles, language, t, onError }) => {
+  /** Lets the parent hold its submit buttons until picked photos are ready. */
+  onBusyChange: (busy: boolean) => void;
+}> = ({ files, setFiles, maxFiles, language, t, onError, onBusyChange }) => {
   const fileRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
   const es = language === 'es';
 
-  const add = (list: FileList | null) => {
+  const setPreparing = (value: boolean) => {
+    setBusy(value);
+    onBusyChange(value);
+  };
+
+  const add = async (list: FileList | null) => {
     if (!list) return;
     onError(null);
     const slots = maxFiles - files.length;
     if (slots <= 0) return onError(t.photoCountLimit.replace('{count}', String(files.length)));
-    const next: PendingFile[] = [];
-    for (const file of Array.from(list).slice(0, slots)) {
-      if (!(ALLOWED_PHOTO_TYPES as readonly string[]).includes(file.type)) return onError(t.photoFormatError.replace('{name}', file.name));
-      if (file.size > MAX_PHOTO_BYTES) return onError(t.photoSizeError.replace('{name}', file.name));
-      next.push({ id: Math.random().toString(36).slice(2, 9), file, previewUrl: URL.createObjectURL(file) });
+    const picked = Array.from(list).slice(0, slots);
+    if (picked.length === 0) return;
+    setPreparing(true);
+    try {
+      const prepared = await preparePhotos(picked);
+      setFiles((prev) => [
+        ...prev,
+        ...prepared.map((file) => ({ id: Math.random().toString(36).slice(2, 9), file, previewUrl: URL.createObjectURL(file) })),
+      ]);
+    } catch (err) {
+      const name = err instanceof PhotoPrepError ? err.fileName : '';
+      const message = err instanceof PhotoPrepError && err.reason === 'too_large' ? t.photoSizeError : t.photoFormatError;
+      onError(message.replace('{name}', name));
+    } finally {
+      setPreparing(false);
     }
-    setFiles((prev) => [...prev, ...next]);
   };
 
   const remove = (id: string) =>
@@ -98,15 +118,20 @@ const PhotoPicker: React.FC<{
     });
 
   const reset = (e: React.ChangeEvent<HTMLInputElement>) => {
-    add(e.target.files);
+    void add(e.target.files);
     e.target.value = '';
   };
 
   return (
     <div className="space-y-2">
       <input ref={fileRef} type="file" multiple accept={ALLOWED_PHOTO_TYPES.join(',')} className="hidden" onChange={reset} />
-      <input ref={cameraRef} type="file" accept={ALLOWED_PHOTO_TYPES.join(',')} capture="environment" className="hidden" onChange={reset} />
-      {files.length < maxFiles && (
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={reset} />
+      {busy && (
+        <p role="status" className="text-xs text-muted">
+          {t.photoProcessing}
+        </p>
+      )}
+      {files.length < maxFiles && !busy && (
         <div className="flex flex-wrap items-center gap-2">
           {files.length < maxFiles && (
             <>
@@ -171,7 +196,7 @@ const PhotoGrid: React.FC<{ photos: PhotoAttachment[]; onOpen: (p: PhotoAttachme
 
 export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request, onClose }) => {
   const { currentUser, role, language } = useAuth();
-  const { changeStatus, addNote, addPhotos, isSubmitting } = useRequests();
+  const { changeStatus, reopenRequest, addNote, addPhotos, isSubmitting } = useRequests();
   const t = translations[language];
   const es = language === 'es';
 
@@ -186,7 +211,11 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
   const [completionNotes, setCompletionNotes] = useState('');
   const [afterFiles, setAfterFiles] = useState<PendingFile[]>([]);
   const [beforeFiles, setBeforeFiles] = useState<PendingFile[]>([]);
+  const [isPreparingPhotos, setIsPreparingPhotos] = useState(false);
   const [noteText, setNoteText] = useState('');
+  const [showReopenForm, setShowReopenForm] = useState(false);
+  const [reopenNote, setReopenNote] = useState('');
+  const [reopenFiles, setReopenFiles] = useState<PendingFile[]>([]);
 
   const reqId = request?.id;
   useEffect(() => {
@@ -203,10 +232,15 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
     () => () => {
       afterFiles.forEach((f) => URL.revokeObjectURL(f.previewUrl));
       beforeFiles.forEach((f) => URL.revokeObjectURL(f.previewUrl));
+      reopenFiles.forEach((f) => URL.revokeObjectURL(f.previewUrl));
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
+
+  // User-typed text shown in the UI language (machine translation; originals stay the source of truth).
+  const comments = request ? translatableComments(request, audit) : [];
+  const translation = useCommentTranslations(reqId, comments, language);
 
   if (!request || !currentUser) return null;
 
@@ -216,6 +250,7 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
   const allowed = isSupervisor ? TRANSITIONS[request.status] : [];
   const canAddNote = isSupervisor ? isOpen : isSubmitter && request.status === 'sin_revisar';
   const canAddBeforePhotos = isSubmitter && request.status === 'sin_revisar' && request.beforePhotos.length < MAX_PHOTOS_PER_KIND;
+  const lastReopen = audit?.filter((a) => a.action === 'status_changed' && a.fromStatus === 'completada').at(-1);
 
   const run = async (fn: () => Promise<string | null>) => {
     setActionError(null);
@@ -270,7 +305,27 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
     });
   };
 
-  const handleAddPhotos = (kind: PhotoKind, files: PendingFile[], clear: () => void) =>
+  const closeReopenForm = () => {
+    reopenFiles.forEach((f) => URL.revokeObjectURL(f.previewUrl));
+    setReopenFiles([]);
+    setReopenNote('');
+    setShowReopenForm(false);
+  };
+
+  const handleReopen = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reopenNote.trim()) {
+      setActionError(t.reopenReasonRequired);
+      return;
+    }
+    return run(async () => {
+      const { failedPhotos } = await reopenRequest(request, reopenNote, reopenFiles.map((f) => f.file));
+      closeReopenForm();
+      return [t.reopenSuccess, failedText(failedPhotos)].filter(Boolean).join(' ');
+    });
+  };
+
+  const handleAddPhotos = (kind: Exclude<PhotoKind, 'reopen'>, files: PendingFile[], clear: () => void) =>
     run(async () => {
       const { failedPhotos } = await addPhotos(request, kind, files.map((f) => f.file));
       files.forEach((f) => URL.revokeObjectURL(f.previewUrl));
@@ -388,7 +443,17 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                         </span>
                         <span className="font-mono text-[11px] whitespace-nowrap">{entry.at ? formatCancunDateTime(entry.at, language) : '…'}</span>
                       </div>
-                      {entry.details && <div className="text-ink whitespace-pre-wrap">{auditDetailsText(t, language, entry)}</div>}
+                      {entry.details &&
+                        (entry.action === 'note_added' || entry.action === 'status_changed' ? (
+                          <TranslatableText
+                            original={entry.details}
+                            outcome={translation({ kind: 'audit', id: entry.id }, entry.details)}
+                            t={t}
+                            className="text-ink whitespace-pre-wrap"
+                          />
+                        ) : (
+                          <div className="text-ink whitespace-pre-wrap">{auditDetailsText(t, language, entry)}</div>
+                        ))}
                       <div className="text-[11px] text-muted">
                         {entry.by.name} ({auditRoleLabel(entry.by.role, language)})
                       </div>
@@ -437,10 +502,15 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                   )}
                   <div>
                     <span className="kl-label block">{t.notesLabel}</span>
-                    <div
-                      className="rich-text text-ink mt-1.5 text-[15px] leading-[1.75] break-words"
-                      dangerouslySetInnerHTML={{ __html: notesToHtml(request.notes) }}
-                    />
+                    <div className="mt-1.5">
+                      <TranslatableText
+                        html
+                        original={request.notes}
+                        outcome={translation({ kind: 'description' }, request.notes)}
+                        t={t}
+                        className="rich-text text-ink text-[15px] leading-[1.75] break-words"
+                      />
+                    </div>
                   </div>
                   <div className="pt-3 border-t border-line flex flex-wrap gap-x-4 gap-y-1 justify-between text-xs text-muted">
                     <span>
@@ -471,11 +541,12 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                         language={language}
                         t={t}
                         onError={setActionError}
+                        onBusyChange={setIsPreparingPhotos}
                       />
                       {beforeFiles.length > 0 && (
                         <button
                           type="button"
-                          disabled={isSubmitting}
+                          disabled={isSubmitting || isPreparingPhotos}
                           onClick={() => handleAddPhotos('before', beforeFiles, () => setBeforeFiles([]))}
                           className="min-h-10 px-4 bg-brand hover:bg-brand-deep text-surface rounded-sm text-sm font-medium cursor-pointer disabled:opacity-50"
                         >
@@ -522,6 +593,33 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                   </div>
                 )}
 
+                {/* What was still wrong when an admin last reopened the ticket (everyone) */}
+                {(lastReopen || request.reopenPhotos.length > 0) && (
+                  <div className="border-l-2 border-plum px-3.5 py-3 text-sm space-y-2">
+                    <div className="font-semibold text-xs text-plum flex items-center gap-1.5">
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      {t.reopenedTitle}
+                    </div>
+                    {lastReopen && (
+                      <>
+                        <div className="text-xs text-muted">
+                          {lastReopen.by.name}
+                          {lastReopen.at ? ` · ${formatCancunDateTime(lastReopen.at, language)}` : ''}
+                        </div>
+                        <TranslatableText
+                          original={lastReopen.details}
+                          outcome={translation({ kind: 'audit', id: lastReopen.id }, lastReopen.details)}
+                          t={t}
+                          className="text-ink whitespace-pre-wrap break-words"
+                        />
+                      </>
+                    )}
+                    {request.reopenPhotos.length > 0 && (
+                      <PhotoGrid photos={request.reopenPhotos} onOpen={setLightboxPhoto} emptyText={t.noPhotosAttached} />
+                    )}
+                  </div>
+                )}
+
                 {/* Completed summary (everyone) */}
                 {request.status === 'completada' && (
                   <div className="bg-ok-wash/60 border-l-2 border-ok px-3.5 py-3 text-sm space-y-1.5 text-ok">
@@ -536,14 +634,85 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                       </div>
                     )}
                     {request.supervisorNotes && (
-                      <div className="pt-1 border-t border-ok-line text-ink whitespace-pre-wrap">
-                        <strong>{t.supervisorNotesLabel}:</strong> {request.supervisorNotes}
+                      <div className="pt-1 border-t border-ok-line text-ink">
+                        <strong>{t.supervisorNotesLabel}:</strong>
+                        <TranslatableText
+                          original={request.supervisorNotes}
+                          outcome={translation({ kind: 'supervisorNotes' }, request.supervisorNotes)}
+                          t={t}
+                          className="whitespace-pre-wrap"
+                        />
                       </div>
                     )}
                     <div className="text-[10px] text-muted pt-0.5 flex items-center gap-1">
                       <Lock className="w-3 h-3" />
                       <span>{t.alreadyCompletedNotice}</span>
                     </div>
+                  </div>
+                )}
+
+                {/* Admin only: send a completed ticket back to pending */}
+                {canReopen(role, request.status) && (
+                  <div className="border-t-2 border-plum pt-4 print:hidden">
+                    {showReopenForm ? (
+                      <form onSubmit={handleReopen} className="border-l-2 border-plum pl-4 py-1 space-y-3">
+                        <div>
+                          <label htmlFor="reopen-reason" className="block text-xs font-semibold text-ink mb-1">
+                            {t.reopenReasonLabel} <span className="text-danger">*</span>
+                          </label>
+                          <textarea
+                            id="reopen-reason"
+                            rows={3}
+                            autoFocus
+                            value={reopenNote}
+                            onChange={(e) => setReopenNote(e.target.value)}
+                            placeholder={t.reopenReasonPlaceholder}
+                            maxLength={2000}
+                            required
+                            className="w-full bg-surface border border-line rounded-sm px-3 py-2.5 text-sm focus:outline-hidden focus:border-plum"
+                          />
+                        </div>
+                        <div>
+                          <span className="block text-xs font-semibold text-ink mb-1">{t.reopenPhotosLabel}</span>
+                          <PhotoPicker
+                            files={reopenFiles}
+                            setFiles={setReopenFiles}
+                            maxFiles={MAX_PHOTOS_PER_KIND - request.reopenPhotos.length}
+                            language={language}
+                            t={t}
+                            onError={setActionError}
+                            onBusyChange={setIsPreparingPhotos}
+                          />
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="submit"
+                            disabled={isSubmitting || isPreparingPhotos || !reopenNote.trim()}
+                            className="min-h-11 px-4 justify-center bg-plum hover:bg-plum-deep text-surface rounded-sm text-sm font-medium flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            {t.confirmReopen}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={closeReopenForm}
+                            disabled={isSubmitting}
+                            className="min-h-11 px-4 justify-center bg-surface hover:bg-wash border border-line rounded-sm text-xs font-medium cursor-pointer disabled:opacity-50"
+                          >
+                            {t.cancel}
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setShowReopenForm(true)}
+                        className="min-h-11 w-full sm:w-auto px-4 justify-center bg-surface hover:bg-wash border border-plum text-plum rounded-sm text-sm font-medium flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        {t.reopenAction}
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -595,7 +764,7 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                           <button
                             type="submit"
                             form="completion-form"
-                            disabled={isSubmitting}
+                            disabled={isSubmitting || isPreparingPhotos}
                             className="min-h-11 px-4 justify-center bg-ok hover:bg-ok-deep text-surface rounded-sm text-sm font-medium flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                           >
                             <CheckCircle2 className="w-3.5 h-3.5" />
@@ -672,6 +841,7 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                             language={language}
                             t={t}
                             onError={setActionError}
+                            onBusyChange={setIsPreparingPhotos}
                           />
                         </div>
                       </form>

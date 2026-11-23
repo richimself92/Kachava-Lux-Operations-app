@@ -49,7 +49,11 @@ export const PhotoLightbox: React.FC<PhotoLightboxProps> = ({ photo, language, o
         <div className="flex items-center justify-between px-4 py-2.5 bg-ink/60 text-surface text-xs border-b border-muted">
           <div className="flex items-center gap-2 truncate">
             <span className="font-semibold uppercase px-1.5 py-0.5 rounded-sm text-[10px] bg-brand">
-              {photo.kind === 'before' ? (es ? 'Evidencia inicial' : 'Initial issue') : es ? 'Después de reparar' : 'After repair'}
+              {photo.kind === 'before'
+                ? es ? 'Evidencia inicial' : 'Initial issue'
+                : photo.kind === 'reopen'
+                  ? es ? 'Por corregir' : 'Still wrong'
+                  : es ? 'Después de reparar' : 'After repair'}
             </span>
             <span className="truncate text-line">{photo.fileName}</span>
           </div>

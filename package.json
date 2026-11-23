@@ -10,7 +10,9 @@
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
     "test": "vitest run --project unit",
+    "pretest:rules": "node scripts/check-java.mjs",
     "test:rules": "firebase emulators:exec --only firestore,storage --project demo-kachava \"vitest run --project rules\"",
+    "pretest:functions": "node scripts/check-java.mjs",
     "test:functions": "npm --prefix functions run build && firebase emulators:exec --only firestore,functions --project demo-kachava \"vitest run --project functions\"",
     "seed:users": "tsx scripts/seed-users.ts",
     "deploy": "npm run build && firebase deploy"

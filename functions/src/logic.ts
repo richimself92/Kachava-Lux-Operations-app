@@ -97,16 +97,21 @@ export function isLifecycleChange(
 }
 
 /**
- * Cleans up after a deleted request: its audit subcollection and its Storage photos
- * (`maintenanceRequests/{reqId}/...`). Photo deletion is injected so tests and environments
- * without Storage can stub it; a failure there is reported but does not block the audit purge.
+ * Cleans up after a deleted request: its audit and cached-translation subcollections and its
+ * Storage photos (`maintenanceRequests/{reqId}/...`). Photo deletion is injected so tests and
+ * environments without Storage can stub it; a failure there is reported but does not block the
+ * Firestore purge.
  */
 export async function purgeRequestArtifacts(
   db: Firestore,
   reqId: string,
   deletePhotos: (prefix: string) => Promise<void>,
 ): Promise<{ photosError: unknown }> {
-  await db.recursiveDelete(db.collection('maintenanceRequests').doc(reqId).collection('audit'));
+  const reqRef = db.collection('maintenanceRequests').doc(reqId);
+  await Promise.all([
+    db.recursiveDelete(reqRef.collection('audit')),
+    db.recursiveDelete(reqRef.collection('translations')),
+  ]);
   try {
     await deletePhotos(`maintenanceRequests/${reqId}/`);
     return { photosError: null };

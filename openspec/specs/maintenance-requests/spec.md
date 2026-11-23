@@ -158,14 +158,14 @@ Each request SHALL receive a unique, human-readable ticket ID in the format `KLM
 - **THEN** the user sees the assigned ticket ID once the backend assigns it, with a placeholder shown until then
 
 ### Requirement: Request photos
-A request SHALL accept up to 5 before-repair photos (from the submitter at creation) and up to 5 after-repair photos (from a supervisor or admin). Rules:
+A request SHALL accept up to 5 before-repair photos (from the submitter at creation), up to 5 after-repair photos (from a supervisor or admin), and up to 5 photos of what is still wrong (from an admin reopening it). Rules:
 - only JPG, PNG, or WebP
 - each photo at most 5 MB
 - photos are stored in Cloud Storage and referenced from the request
 
 #### Scenario: Oversized photo
-- **WHEN** a user attaches a 7 MB image
-- **THEN** it is rejected with a size message, and the backend would also reject the upload
+- **WHEN** a user attaches a 7 MB JPG, PNG, or WebP image
+- **THEN** the app reduces it to at most 5 MB before upload, or rejects it with a size message if it cannot, and the backend rejects any upload over 5 MB
 
 #### Scenario: Sixth photo
 - **WHEN** a request already has 5 before-repair photos and another is added

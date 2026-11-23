@@ -205,6 +205,7 @@ describe('purgeRequestArtifacts (logic)', () => {
     const ref = await db.collection('maintenanceRequests').add(requestDoc(T0));
     await ref.collection('audit').add({ action: 'created', at: Timestamp.fromMillis(T0), details: '' });
     await ref.collection('audit').add({ action: 'note_added', at: Timestamp.fromMillis(T0 + H), details: 'x' });
+    await ref.collection('translations').doc('description_en').set({ sourceHash: 'h', status: 'translated', text: 't' });
     await ref.delete();
 
     const prefixes: string[] = [];
@@ -214,6 +215,7 @@ describe('purgeRequestArtifacts (logic)', () => {
     expect(ok.photosError).toBeNull();
     expect(prefixes).toEqual([`maintenanceRequests/${ref.id}/`]);
     expect((await ref.collection('audit').get()).size).toBe(0);
+    expect((await ref.collection('translations').get()).size).toBe(0);
 
     const failed = await purgeRequestArtifacts(db, ref.id, async () => {
       throw new Error('storage down');

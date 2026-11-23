@@ -37,6 +37,14 @@ export const translations = {
     pendingReasonLabel: 'Reason it cannot be completed yet',
     pendingReasonRequired: 'Please enter the reason it cannot be completed yet.',
     confirmPending: 'Confirm pending',
+    reopenAction: 'Reopen ticket',
+    reopenReasonLabel: 'What is still wrong?',
+    reopenReasonPlaceholder: 'Describe what was not done correctly...',
+    reopenReasonRequired: 'Please describe what is still wrong.',
+    reopenPhotosLabel: 'Photo of what is still wrong (optional)',
+    confirmReopen: 'Confirm reopen',
+    reopenSuccess: 'Ticket reopened and moved to Pending.',
+    reopenedTitle: 'Reopened: still wrong',
     editRequest: 'Edit work order',
     editRequestTitle: 'Edit {ticket}',
     saveChanges: 'Save changes',
@@ -220,7 +228,8 @@ export const translations = {
     submissionTimeLabel: 'Submitted at (Cancún time)',
     dateTimeColumn: 'Date & Time',
     photoUploadTitle: 'Photo Attachments',
-    photoUploadSubtitle: 'Attach up to 5 photos (max 5 MB each, JPG/PNG/WebP)',
+    photoUploadSubtitle: 'Attach up to 5 photos (JPG/PNG/WebP). Large photos are reduced automatically.',
+    photoProcessing: 'Preparing photo…',
     takeOrUploadPhotos: 'Upload or Capture',
     dragOrClick: 'Capture from camera or select files',
     cameraHint: 'Mobile camera and photo gallery supported',
@@ -299,6 +308,15 @@ export const translations = {
     
     // Generic UI
     loading: 'Loading...',
+
+    // Machine translation of comments
+    machineTranslation: 'Machine translation',
+    viewOriginal: 'View original',
+    viewTranslation: 'View translation',
+    translating: 'Translating…',
+    translationFailed: 'Could not translate. Showing the original.',
+    translationBusy: 'Translation is busy right now. Try again later. Showing the original.',
+
     close: 'Close',
     save: 'Save',
     confirm: 'Confirm',
@@ -348,6 +366,14 @@ export const translations = {
     pendingReasonLabel: 'Motivo por el que aún no se puede completar',
     pendingReasonRequired: 'Por favor ingrese el motivo por el que aún no se puede completar.',
     confirmPending: 'Confirmar pendiente',
+    reopenAction: 'Reabrir orden',
+    reopenReasonLabel: '¿Qué sigue mal?',
+    reopenReasonPlaceholder: 'Describa lo que no se hizo correctamente...',
+    reopenReasonRequired: 'Por favor describa lo que sigue mal.',
+    reopenPhotosLabel: 'Foto de lo que sigue mal (opcional)',
+    confirmReopen: 'Confirmar reapertura',
+    reopenSuccess: 'Orden reabierta y movida a Pendiente.',
+    reopenedTitle: 'Reabierta: sigue mal',
     editRequest: 'Editar orden',
     editRequestTitle: 'Editar {ticket}',
     saveChanges: 'Guardar cambios',
@@ -531,7 +557,8 @@ export const translations = {
     submissionTimeLabel: 'Fecha y hora de envío (Cancún)',
     dateTimeColumn: 'Fecha y Hora',
     photoUploadTitle: 'Fotografías de Evidencia',
-    photoUploadSubtitle: 'Hasta 5 fotografías (máx. 5 MB por imagen, JPG/PNG/WebP)',
+    photoUploadSubtitle: 'Hasta 5 fotografías (JPG/PNG/WebP). Las fotos grandes se reducen automáticamente.',
+    photoProcessing: 'Preparando foto…',
     takeOrUploadPhotos: 'Subir o Capturar',
     dragOrClick: 'Capture con la cámara o seleccione archivos',
     cameraHint: 'Compatible con cámara y galería móvil',
@@ -610,6 +637,15 @@ export const translations = {
     
     // Generic UI
     loading: 'Cargando...',
+
+    // Traducción automática de comentarios
+    machineTranslation: 'Traducción automática',
+    viewOriginal: 'Ver original',
+    viewTranslation: 'Ver traducción',
+    translating: 'Traduciendo…',
+    translationFailed: 'No se pudo traducir. Se muestra el original.',
+    translationBusy: 'El servicio de traducción está ocupado. Intente más tarde. Se muestra el original.',
+
     close: 'Cerrar',
     save: 'Guardar',
     confirm: 'Confirmar',
