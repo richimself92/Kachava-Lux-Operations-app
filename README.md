@@ -52,6 +52,10 @@ Shared enums and domain rules (locations, categories, priorities, statuses, SLA 
   language, using Cloud Translation v3. Translations are labelled "Machine translation" and have a per-comment
   "View original" toggle; text already in the selected language is shown as written; if translation fails the
   original stays visible. The stored originals are never changed.
+- **New-request notifications:** when a request is created, the Maintenance Manager (job title) and the
+  assigned supervisor — never the submitter — hear a chime and see a notice if the app is open, and get a
+  system notification on devices where they tapped "Turn on notifications" (menu), even with the phone locked.
+  Tapping it opens the request. iPhone: add the app to the Home Screen first (iOS 16.4+). Setup: DEPLOYMENT §10.
 
 ### Lifecycle
 `sin_revisar` → `pendiente` ⇄ `reconocida` → `completada` (pendiente requires a reason; completion requires a note). Admins can reopen a completed request: it goes back to `pendiente` with a required note on what is still wrong and optional photos; the previous completion stays in the audit history. Supervisors/admins edit location, category, priority and supervisor of open requests from the pencil in the Work Orders table (audited; the SLA is recomputed on priority change). Only admins can delete requests (trash icon in the same table).
@@ -98,7 +102,8 @@ or the local emulators.
 ### Environment
 Copy `.env.example` to `.env.local` and fill in the web app config from the Firebase console
 (Project settings → Your apps). `.env*` files are git-ignored; never commit them or any service-account key.
-Set `VITE_USE_EMULATORS=true` to use the local emulators.
+Set `VITE_USE_EMULATORS=true` to use the local emulators. `VITE_FIREBASE_VAPID_KEY` (Web Push public key,
+Firebase console → Project settings → Cloud Messaging) enables device notifications; push is off with emulators.
 
 ### Emulators
 ```bash
@@ -115,9 +120,10 @@ access is needed.
 ```bash
 npm run lint            # type-check
 npm test                # unit tests (domain, time/Cancun, KPI math, rich text, photos, rules/domain parity,
-                        #   roster, comment-translation client and UI, JDK pre-check)
+                        #   roster, comment-translation client and UI, JDK pre-check, job titles,
+                        #   new-request alerts and push support)
 npm run test:rules      # Firestore + Storage security rules against the emulators (needs a HotSpot JDK)
-npm run test:functions  # Cloud Functions logic, triggers and translateComments against the emulators (HotSpot JDK)
+npm run test:functions  # Cloud Functions logic, triggers, translateComments and new-request push (HotSpot JDK)
 npm run build           # production bundle
 ```
 

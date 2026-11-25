@@ -1,14 +1,16 @@
 # Handoff — Kachava Lux Maintenance
 
-Status as of **2026-11-23**. Covers OpenSpec change `firebase-backend-and-workflow` (archived), the
-follow-up UI/feature rounds (work-order edit/delete, MUJI redesign, phone photos, admin reopen) and the
-change `translate-ticket-comments` (implemented and archived on 2026-11-23, not deployed).
+Status as of **2026-11-25**. Covers OpenSpec change `firebase-backend-and-workflow` (archived), the
+follow-up UI/feature rounds (work-order edit/delete, MUJI redesign, phone photos, admin reopen), the
+change `translate-ticket-comments` (implemented and archived on 2026-11-23), the translated job-title
+catalog with deletion of deactivated users, and the new-request notifications (sound + web push, branch
+`push-notifications`, 2026-11-25). None of the last three are confirmed on production yet.
 
 ## 1. Where things are
 
 | Item | Value |
 | --- | --- |
-| Repository | https://github.com/richimself92/Kachava-Lux-Operations-app (`spec-backend` is merged into `main`; `design-improvements` (redesign, photos, admin reopen) is ahead of `main`; comment translation is on `translation-service`, built on top of `design-improvements`) |
+| Repository | https://github.com/richimself92/Kachava-Lux-Operations-app (`spec-backend`, `design-improvements` and `translation-service` (comment translation, job titles, user deletion) are merged into `main`; new-request notifications are on `push-notifications`, pushed 2026-11-25, PR pending) |
 | Production URL | https://kachava-lux-ops.web.app |
 | Firebase project ID | `kachava-lux-ops` (project number 146497773004), Blaze plan |
 | Firestore location | `nam5` → Cloud Functions in `us-central1` |
@@ -24,11 +26,12 @@ change `translate-ticket-comments` (implemented and archived on 2026-11-23, not 
 - **Pending:** the latest rules (admin-only request deletion, new facilities, optional legacy location detail,
   10,000-char rich-text notes, required pending reason, supervisor detail edits — location, category, priority,
   supervisor — admin reopen of completed requests with reopen photos, explicit client deny on
-  `maintenanceRequests/{id}/translations`, admin deletion of deactivated users) and functions (default supervisor, cleanup on delete including
-  cached translations, ticket backfill, SLA recompute on priority change, `translateComments`) are **not
-  deployed yet**. Deploy order in §6 below.
-- Automated coverage: 104 rules tests (Firestore + Storage + client service + photo uploads per role + reopen),
-  42 functions tests (triggers + comment translation), 97 unit tests — all passing on 2026-11-25.
+  `maintenanceRequests/{id}/translations`, admin deletion of deactivated users, `users/{email}/pushTokens`)
+  and functions (default supervisor, cleanup on delete including cached translations, ticket backfill, SLA
+  recompute on priority change, `translateComments`, new-request push) are **not confirmed deployed**. Deploy order in §6 below.
+- Automated coverage: 105 rules tests (Firestore + Storage + client service + photo uploads per role + reopen +
+  push tokens), 47 functions tests (triggers + comment translation + new-request push with a fake FCM),
+  107 unit tests (incl. alert recipients, push support per platform, alert hook) — all passing on 2026-11-25.
   `npm run test:rules` / `test:functions` need a HotSpot JDK; a pre-check (`scripts/check-java.mjs`) stops
   with instructions when the `java` on PATH is OpenJ9 (IBM Semeru), which otherwise fails with
   `{"error":{"code":500,"status":"UNKNOWN"}}`.
@@ -121,8 +124,12 @@ Fill in the ⏳ rows (date, account used, result) after the next production depl
    `roles/firebasecloudmessaging.admin` (DEPLOYMENT §10); deploy rules → functions → hosting; each
    recipient taps "Turn on notifications" once per device (iPhone: from the Home Screen app). Run row 14.
 5. Run the ⏳ rows of §5 and record the results here.
-6. Merge `design-improvements` into `main`, then `translation-service`, once the checklist passes.
+6. Open the PR for `push-notifications` (https://github.com/richimself92/Kachava-Lux-Operations-app/pull/new/push-notifications)
+   and merge it into `main` once checklist row 14 passes. To test with another account, set that user's title
+   to `maintenance_manager` with a one-entry roster and `npm run seed:users` (keep the role; revert afterwards).
 7. Rotate the Microsoft client secret before it expires (DEPLOYMENT §8).
 8. Known limitations: no "recompute KPIs" admin action; orphan Storage objects from failed uploads are not
    cleaned up; deletion is permanent with no undo; translations are shown only in the request detail (not in
-   lists or previews), and the language switch is not reachable while a request is open.
+   lists or previews), and the language switch is not reachable while a request is open. Notifications are
+   sent only when a request is created (not on reassignment); on iPhone they need the Home Screen app
+   (iOS 16.4+); the push sound is the device's notification tone.
