@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { btnPrimary, PageHeader } from './Kit';
 import { ConfirmDialog } from './ConfirmDialog';
 import { translations } from '../i18n/translations';
-import { jobTitleOptions, type Dict } from '../lib/labels';
+import { jobTitleLabel, jobTitleOptions, type Dict } from '../lib/labels';
 import { addUser, deleteUser, InvalidEmailError, subscribeUsers, updateUser, UserExistsError } from '../services/users';
 import type { AppUser, Role } from '../types';
 
@@ -240,14 +240,7 @@ export const UserManagementView: React.FC = () => {
                     <span className="text-[15px] text-ink truncate">{user.displayName}</span>
                     {isSelf && <span className="kl-label !text-[10px] shrink-0">{es ? 'Usted' : 'You'}</span>}
                   </div>
-                  <TitleSelect
-                    t={t}
-                    value={user.title}
-                    disabled={busy}
-                    onChange={(title) => runUpdate(user.email, { title })}
-                    className="mt-1 mb-1 w-full max-w-xs min-h-9 border border-line rounded-sm px-2 text-sm text-muted bg-surface cursor-pointer"
-                    ariaLabel={`${t.colTitle} — ${user.displayName}`}
-                  />
+                  {user.title && <div className="text-sm text-muted truncate">{jobTitleLabel(t, user.title)}</div>}
                   <div className="text-xs text-muted font-mono truncate">{user.email}</div>
                   <div className="mt-1 text-xs">
                     {user.lastSignInAt ? (
@@ -337,16 +330,7 @@ export const UserManagementView: React.FC = () => {
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-2.5 whitespace-nowrap">
-                      <TitleSelect
-                        t={t}
-                        value={user.title}
-                        disabled={busy}
-                        onChange={(title) => runUpdate(user.email, { title })}
-                        className="min-h-9 border border-line rounded-sm px-2 text-sm text-muted bg-surface cursor-pointer"
-                        ariaLabel={`${t.colTitle} — ${user.displayName}`}
-                      />
-                    </td>
+                    <td className="px-4 py-2.5 text-muted whitespace-nowrap">{jobTitleLabel(t, user.title)}</td>
                     <td className="px-4 py-2.5 text-muted font-mono text-xs whitespace-nowrap">{user.email}</td>
                     <td className="px-4 py-2.5 whitespace-nowrap">
                       {isSelf ? (

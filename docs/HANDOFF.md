@@ -64,8 +64,10 @@ Seeded from `scripts/initial-roster.json`; afterwards managed in the app (Person
   entries keep their own name/email snapshots, so attribution is unaffected; active users and your own entry
   cannot be deleted (enforced by the rules).
 - **Job titles:** the free-text title became a fixed, translated catalog (`JOB_TITLES` in `shared/domain.ts`,
-  stored as codes such as `maintenance_manager`). Existing English titles are still recognised and translated;
-  picking a title in Personal saves the code, and re-running `seed-users` also normalises them.
+  stored as codes such as `maintenance_manager`) chosen only in the "Add user" form; the Position column is
+  read-only translated text. Existing English titles are still recognised and translated; re-running
+  `seed-users` normalises them to codes. `firebase.json` now builds the app (`npm run build`) before every
+  hosting deploy.
 - **Reopening completed requests:** the original lifecycle made `completada` final. Admins can now reopen a
   completed request back to `pendiente` with a required note and up to 5 photos; the previous completion stays
   in the audit history and KPI work time continues.

@@ -70,9 +70,9 @@ The system SHALL support exactly three roles:
 - **THEN** the backend rejects the write
 
 ### Requirement: Admin user management
-Admins SHALL be able to add an approved user (email, display name, role, title), change a user's role and title, activate or deactivate a user, and permanently delete a user that is already deactivated. These changes SHALL persist and take effect on that user's next data access without redeploying the app.
+Admins SHALL be able to add an approved user (email, display name, role, title), change a user's role, activate or deactivate a user, and permanently delete a user that is already deactivated. These changes SHALL persist and take effect on that user's next data access without redeploying the app.
 
-The title SHALL be chosen from a fixed job-title catalog (stored as a stable code) and SHALL be displayed in the selected UI language. Titles stored as English text before the catalog existed SHALL be recognised and translated; unknown titles SHALL be shown as stored.
+The title SHALL be chosen from a fixed job-title catalog (stored as a stable code) only when the user is added, and SHALL be displayed as read-only text in the selected UI language. Titles stored as English text before the catalog existed SHALL be recognised and translated; unknown titles SHALL be shown as stored.
 
 #### Scenario: Title shown in the selected language
 - **WHEN** a user's title is `maintenance_manager` (or the legacy text "Maintenance Manager") and the UI language is Spanish
