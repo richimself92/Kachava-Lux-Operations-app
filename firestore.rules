@@ -131,8 +131,11 @@ service cloud.firestore {
           && request.resource.data.lastSignInAt == request.time
         );
 
-      // Deactivate instead of deleting, to preserve attribution history.
-      allow delete: if false;
+      // Admins may permanently remove a user only after deactivating it (two deliberate steps).
+      // Requests and audit entries keep their own name/email snapshots, so history is unaffected.
+      allow delete: if isAdmin()
+        && resource.data.active == false
+        && email != emailLower();
     }
 
     // ------------------------------------------------------------------

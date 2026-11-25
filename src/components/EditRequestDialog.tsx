@@ -4,7 +4,7 @@ import type { MaintenanceCategory, RequestPriority } from '../../shared/domain';
 import { useAuth } from '../context/AuthContext';
 import { useRequests } from '../context/RequestContext';
 import { translations } from '../i18n/translations';
-import { categoryOptions, locationLabel, priorityOptions, ticketLabel } from '../lib/labels';
+import { categoryOptions, jobTitleLabel, locationLabel, priorityOptions, ticketLabel } from '../lib/labels';
 import type { MaintenanceRequest } from '../types';
 
 interface EditRequestDialogProps {
@@ -161,7 +161,7 @@ export const EditRequestDialog: React.FC<EditRequestDialogProps> = ({ request, o
             {supervisors.map((s) => (
               <option key={s.email} value={s.email}>
                 {s.displayName}
-                {s.title ? ` (${s.title})` : ''}
+                {s.title ? ` (${jobTitleLabel(t, s.title)})` : ''}
               </option>
             ))}
           </select>

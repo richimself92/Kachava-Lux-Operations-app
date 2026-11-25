@@ -23,6 +23,43 @@ export function isSupervisorRole(role: Role | undefined | null): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Job titles (informational only; permissions come from the role)
+// ---------------------------------------------------------------------------
+/** Stable codes stored in `users/{email}.title`; the UI translates them. */
+export const JOB_TITLES = [
+  'founder_ceo',
+  'general_manager',
+  'administrative_manager',
+  'maintenance_manager',
+  'marketing_manager',
+  'revenue_manager',
+  'private_chef',
+  'yacht_captain',
+  'housekeeping',
+] as const;
+export type JobTitle = (typeof JOB_TITLES)[number];
+
+/** English free-text titles written before the catalog existed, mapped to their code. */
+const LEGACY_JOB_TITLES: Readonly<Record<string, JobTitle>> = {
+  'founder & ceo': 'founder_ceo',
+  'general manager': 'general_manager',
+  'administrative manager': 'administrative_manager',
+  'maintenance manager': 'maintenance_manager',
+  'marketing manager': 'marketing_manager',
+  'revenue manager': 'revenue_manager',
+  'private chef': 'private_chef',
+  'yacht captain': 'yacht_captain',
+  housekeeping: 'housekeeping',
+};
+
+/** Resolves a stored title (code or legacy English text) to its catalog code, or null if unknown. */
+export function toJobTitle(stored: string | undefined | null): JobTitle | null {
+  const v = String(stored ?? '').trim();
+  if ((JOB_TITLES as readonly string[]).includes(v)) return v as JobTitle;
+  return LEGACY_JOB_TITLES[v.toLowerCase()] ?? null;
+}
+
+// ---------------------------------------------------------------------------
 // Lifecycle
 // ---------------------------------------------------------------------------
 export const STATUSES = ['sin_revisar', 'pendiente', 'reconocida', 'completada'] as const;

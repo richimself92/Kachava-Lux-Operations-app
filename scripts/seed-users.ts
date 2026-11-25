@@ -15,7 +15,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { applicationDefault, initializeApp } from 'firebase-admin/app';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
-import { isCompanyEmail, ROLES, type Role } from '../shared/domain';
+import { isCompanyEmail, ROLES, toJobTitle, type Role } from '../shared/domain';
 
 interface RosterEntry {
   email: string;
@@ -55,7 +55,9 @@ export function validateRoster(raw: unknown): RosterEntry[] {
     const displayName = String(e.displayName ?? '').trim();
     if (!displayName) throw new Error(`${where}: displayName is required`);
     if (!(ROLES as readonly string[]).includes(String(e.role))) throw new Error(`${where}: invalid role "${e.role}"`);
-    const title = String(e.title ?? '').trim();
+    const rawTitle = String(e.title ?? '').trim();
+    // Store the job-title catalog code (translated in the UI); unknown titles are kept as written.
+    const title = toJobTitle(rawTitle) ?? rawTitle;
     if (e.active !== undefined && typeof e.active !== 'boolean') throw new Error(`${where}: active must be boolean`);
     return { email, displayName, role: e.role as Role, title, active: e.active as boolean | undefined };
   });

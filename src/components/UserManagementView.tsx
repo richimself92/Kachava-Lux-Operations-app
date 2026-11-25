@@ -1,16 +1,57 @@
 import React, { useEffect, useState } from 'react';
-import { AlertCircle, CheckCircle2, Loader2, ShieldAlert, UserPlus, X } from 'lucide-react';
-import { ROLES } from '../../shared/domain';
+import { AlertCircle, CheckCircle2, Loader2, ShieldAlert, Trash2, UserPlus, X } from 'lucide-react';
+import { ROLES, toJobTitle } from '../../shared/domain';
 import { useAuth } from '../context/AuthContext';
 import { btnPrimary, PageHeader } from './Kit';
+import { ConfirmDialog } from './ConfirmDialog';
 import { translations } from '../i18n/translations';
-import { addUser, InvalidEmailError, subscribeUsers, updateUser, UserExistsError } from '../services/users';
+import { jobTitleOptions, type Dict } from '../lib/labels';
+import { addUser, deleteUser, InvalidEmailError, subscribeUsers, updateUser, UserExistsError } from '../services/users';
 import type { AppUser, Role } from '../types';
 
 const ROLE_BADGE: Record<Role, string> = {
   admin: 'border border-brand text-brand',
   supervisor: 'border border-line-strong text-ink',
   staff: 'border border-line text-muted',
+};
+
+/**
+ * Position picker backed by the translated job-title catalog. A legacy English title maps to its
+ * code; an unknown free-text title stays selectable as-is so it is never silently replaced.
+ */
+const TitleSelect: React.FC<{
+  t: Dict;
+  value: string;
+  onChange: (code: string) => void;
+  disabled?: boolean;
+  required?: boolean;
+  className: string;
+  ariaLabel: string;
+}> = ({ t, value, onChange, disabled, required, className, ariaLabel }) => {
+  const code = toJobTitle(value);
+  const custom = !code && value.trim() ? value : null;
+  return (
+    <select
+      value={code ?? value}
+      disabled={disabled}
+      required={required}
+      onChange={(e) => onChange(e.target.value)}
+      className={className}
+      aria-label={ariaLabel}
+    >
+      {!code && !custom && (
+        <option value="" disabled>
+          {t.titleSelect}
+        </option>
+      )}
+      {custom && <option value={custom}>{custom}</option>}
+      {jobTitleOptions(t).map((o) => (
+        <option key={o.key} value={o.key}>
+          {o.label}
+        </option>
+      ))}
+    </select>
+  );
 };
 
 /** Admin-only management of the approved users list (`users/{emailLower}`). */
@@ -32,6 +73,10 @@ export const UserManagementView: React.FC = () => {
   const [newTitle, setNewTitle] = useState('');
   const [addError, setAddError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+
+  const [pendingDelete, setPendingDelete] = useState<AppUser | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -111,6 +156,39 @@ export const UserManagementView: React.FC = () => {
     }
   };
 
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteUser(pendingDelete.email);
+      setPendingDelete(null);
+    } catch (err) {
+      console.error('Delete user failed', err);
+      setDeleteError(t.deleteUserFailed);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const askDelete = (user: AppUser) => {
+    setDeleteError(null);
+    setPendingDelete(user);
+  };
+
+  const trashButton = (user: AppUser, busy: boolean, size: string) => (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={() => askDelete(user)}
+      className={`${size} shrink-0 inline-flex items-center justify-center text-danger border border-danger-line rounded-sm hover:bg-danger-wash cursor-pointer disabled:opacity-50`}
+      title={t.deleteUser}
+      aria-label={`${t.deleteUser} — ${user.displayName}`}
+    >
+      <Trash2 className="w-4 h-4" strokeWidth={1.5} />
+    </button>
+  );
+
   const roleLabel = (r: Role) => (r === 'admin' ? t.roleAdmin : r === 'supervisor' ? t.roleSupervisor : t.roleStaff);
 
   return (
@@ -162,7 +240,14 @@ export const UserManagementView: React.FC = () => {
                     <span className="text-[15px] text-ink truncate">{user.displayName}</span>
                     {isSelf && <span className="kl-label !text-[10px] shrink-0">{es ? 'Usted' : 'You'}</span>}
                   </div>
-                  {user.title && <div className="text-sm text-muted truncate">{user.title}</div>}
+                  <TitleSelect
+                    t={t}
+                    value={user.title}
+                    disabled={busy}
+                    onChange={(title) => runUpdate(user.email, { title })}
+                    className="mt-1 mb-1 w-full max-w-xs min-h-9 border border-line rounded-sm px-2 text-sm text-muted bg-surface cursor-pointer"
+                    ariaLabel={`${t.colTitle} — ${user.displayName}`}
+                  />
                   <div className="text-xs text-muted font-mono truncate">{user.email}</div>
                   <div className="mt-1 text-xs">
                     {user.lastSignInAt ? (
@@ -204,6 +289,7 @@ export const UserManagementView: React.FC = () => {
                     >
                       {user.active ? (es ? 'Desactivar' : 'Deactivate') : es ? 'Activar' : 'Activate'}
                     </button>
+                    {!user.active && trashButton(user, busy, 'w-10 h-10')}
                   </>
                 )}
               </div>
@@ -251,7 +337,16 @@ export const UserManagementView: React.FC = () => {
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-2.5 text-muted whitespace-nowrap">{user.title}</td>
+                    <td className="px-4 py-2.5 whitespace-nowrap">
+                      <TitleSelect
+                        t={t}
+                        value={user.title}
+                        disabled={busy}
+                        onChange={(title) => runUpdate(user.email, { title })}
+                        className="min-h-9 border border-line rounded-sm px-2 text-sm text-muted bg-surface cursor-pointer"
+                        ariaLabel={`${t.colTitle} — ${user.displayName}`}
+                      />
+                    </td>
                     <td className="px-4 py-2.5 text-muted font-mono text-xs whitespace-nowrap">{user.email}</td>
                     <td className="px-4 py-2.5 whitespace-nowrap">
                       {isSelf ? (
@@ -290,13 +385,16 @@ export const UserManagementView: React.FC = () => {
                     </td>
                     <td className="px-4 py-2.5 text-right whitespace-nowrap">
                       {!isSelf && (
-                        <button
-                          disabled={busy}
-                          onClick={() => runUpdate(user.email, { active: !user.active })}
-                          className="text-xs text-brand hover:underline font-medium cursor-pointer disabled:opacity-50"
-                        >
-                          {user.active ? (es ? 'Desactivar' : 'Deactivate') : es ? 'Activar' : 'Activate'}
-                        </button>
+                        <div className="inline-flex items-center gap-3">
+                          <button
+                            disabled={busy}
+                            onClick={() => runUpdate(user.email, { active: !user.active })}
+                            className="text-xs text-brand hover:underline font-medium cursor-pointer disabled:opacity-50"
+                          >
+                            {user.active ? (es ? 'Desactivar' : 'Deactivate') : es ? 'Activar' : 'Activate'}
+                          </button>
+                          {!user.active && trashButton(user, busy, 'w-8 h-8')}
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -311,8 +409,8 @@ export const UserManagementView: React.FC = () => {
         <ShieldAlert className="w-4 h-4 text-brand shrink-0 mt-0.5" />
         <div className="text-muted text-xs leading-relaxed">
           {es
-            ? 'Solo las personas en esta lista (cuenta Microsoft @kachavalux.com) pueden entrar. Desactivar a un usuario bloquea su acceso de inmediato. El rol define los permisos; el puesto es solo informativo.'
-            : 'Only people on this list (Microsoft @kachavalux.com account) can sign in. Deactivating a user blocks access immediately. Role defines permissions; job title is informational only.'}
+            ? 'Solo las personas en esta lista (cuenta Microsoft @kachavalux.com) pueden entrar. Desactivar a un usuario bloquea su acceso de inmediato; una vez desactivado, el ícono de basura lo borra de la lista de forma permanente. El rol define los permisos; el puesto es solo informativo.'
+            : 'Only people on this list (Microsoft @kachavalux.com account) can sign in. Deactivating a user blocks access immediately; once deactivated, the trash icon removes them from the list permanently. Role defines permissions; job title is informational only.'}
         </div>
       </div>
 
@@ -356,7 +454,14 @@ export const UserManagementView: React.FC = () => {
                 <span className="block font-medium text-ink mb-1">
                   {t.colTitle} <span className="text-danger">*</span>
                 </span>
-                <input type="text" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} className="w-full border border-line rounded-sm p-2 text-sm" required />
+                <TitleSelect
+                  t={t}
+                  value={newTitle}
+                  onChange={setNewTitle}
+                  required
+                  className="w-full border border-line rounded-sm p-2 text-sm bg-surface"
+                  ariaLabel={t.colTitle}
+                />
               </label>
               <label className="block">
                 <span className="block font-medium text-ink mb-1">
@@ -385,6 +490,19 @@ export const UserManagementView: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {pendingDelete && (
+        <ConfirmDialog
+          title={t.deleteUserTitle}
+          body={t.deleteUserBody.replace('{name}', pendingDelete.displayName).replace('{email}', pendingDelete.email)}
+          confirmLabel={t.deleteUserConfirm}
+          cancelLabel={t.cancel}
+          busy={deleting}
+          error={deleteError}
+          onConfirm={confirmDelete}
+          onCancel={() => setPendingDelete(null)}
+        />
       )}
     </div>
   );

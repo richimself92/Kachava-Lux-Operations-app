@@ -3,6 +3,7 @@ import { ClipboardList, Home, LayoutDashboard, LogOut, PanelLeftClose, PanelLeft
 import { useAuth } from '../context/AuthContext';
 import { useRequests } from '../context/RequestContext';
 import { translations } from '../i18n/translations';
+import { jobTitleLabel } from '../lib/labels';
 
 interface SidebarProps {
   currentTab: string;
@@ -162,7 +163,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div className="text-xs text-muted truncate" title={currentUser?.email}>
               {currentUser?.email}
             </div>
-            {currentUser?.title && <div className="text-xs text-muted truncate">{currentUser.title}</div>}
+            {currentUser?.title && <div className="text-xs text-muted truncate">{jobTitleLabel(t, currentUser.title)}</div>}
           </div>
         )}
         <button

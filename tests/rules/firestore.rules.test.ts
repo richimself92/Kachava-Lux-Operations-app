@@ -136,8 +136,16 @@ describe('access control', () => {
     );
   });
 
-  it('never allows deleting users', async () => {
+  it('lets only admins delete users, and only deactivated ones', async () => {
+    // Active users cannot be deleted, not even by an admin (deactivate first).
     await assertFails(deleteDoc(doc(dbFor(env, USERS.admin), 'users', USERS.staff.email)));
+    await assertFails(deleteDoc(doc(dbFor(env, USERS.admin), 'users', USERS.admin.email)));
+    // Non-admins cannot delete a deactivated user.
+    await assertFails(deleteDoc(doc(dbFor(env, USERS.sup), 'users', USERS.inactive.email)));
+    await assertFails(deleteDoc(doc(dbFor(env, USERS.staff), 'users', USERS.inactive.email)));
+    await assertFails(deleteDoc(doc(dbFor(env, USERS.inactive), 'users', USERS.inactive.email)));
+    // An admin can.
+    await assertSucceeds(deleteDoc(doc(dbFor(env, USERS.admin), 'users', USERS.inactive.email)));
   });
 
   it('lets only admins delete requests (not supervisors, staff or the submitter)', async () => {

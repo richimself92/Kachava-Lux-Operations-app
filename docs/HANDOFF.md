@@ -24,11 +24,11 @@ change `translate-ticket-comments` (implemented and archived on 2026-11-23, not 
 - **Pending:** the latest rules (admin-only request deletion, new facilities, optional legacy location detail,
   10,000-char rich-text notes, required pending reason, supervisor detail edits — location, category, priority,
   supervisor — admin reopen of completed requests with reopen photos, explicit client deny on
-  `maintenanceRequests/{id}/translations`) and functions (default supervisor, cleanup on delete including
+  `maintenanceRequests/{id}/translations`, admin deletion of deactivated users) and functions (default supervisor, cleanup on delete including
   cached translations, ticket backfill, SLA recompute on priority change, `translateComments`) are **not
   deployed yet**. Deploy order in §6 below.
 - Automated coverage: 104 rules tests (Firestore + Storage + client service + photo uploads per role + reopen),
-  42 functions tests (triggers + comment translation), 93 unit tests — all passing on 2026-11-23.
+  42 functions tests (triggers + comment translation), 97 unit tests — all passing on 2026-11-25.
   `npm run test:rules` / `test:functions` need a HotSpot JDK; a pre-check (`scripts/check-java.mjs`) stops
   with instructions when the `java` on PATH is OpenJ9 (IBM Semeru), which otherwise fails with
   `{"error":{"code":500,"status":"UNKNOWN"}}`.
@@ -59,6 +59,13 @@ Seeded from `scripts/initial-roster.json`; afterwards managed in the app (Person
 - **Request deletion:** the original design kept every record forever. Admins can now permanently delete a
   request; its audit history and photos are removed with it. There is no record of who deleted it beyond the
   function log (request ID + ticket ID).
+- **Deleting users:** the original design kept every allowlist entry forever (deactivate only). Admins can now
+  permanently delete a user that is already deactivated (trash icon in Personal → Actions). Requests and audit
+  entries keep their own name/email snapshots, so attribution is unaffected; active users and your own entry
+  cannot be deleted (enforced by the rules).
+- **Job titles:** the free-text title became a fixed, translated catalog (`JOB_TITLES` in `shared/domain.ts`,
+  stored as codes such as `maintenance_manager`). Existing English titles are still recognised and translated;
+  picking a title in Personal saves the code, and re-running `seed-users` also normalises them.
 - **Reopening completed requests:** the original lifecycle made `completada` final. Admins can now reopen a
   completed request back to `pendiente` with a required note and up to 5 photos; the previous completion stays
   in the audit history and KPI work time continues.
