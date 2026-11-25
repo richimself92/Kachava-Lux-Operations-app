@@ -1,5 +1,6 @@
 import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
   onSnapshot,
@@ -99,4 +100,13 @@ export async function updateUser(
   patch: Partial<Pick<AppUser, 'displayName' | 'role' | 'title' | 'active'>>,
 ): Promise<void> {
   await updateDoc(doc(db(), 'users', normalizeEmail(email)), { ...patch, updatedAt: serverTimestamp() });
+}
+
+/**
+ * Admin: permanently removes a deactivated user from the allowlist.
+ * Rules reject deleting an active user or yourself. Requests and audit entries keep their
+ * own name/email snapshots, so attribution history is unaffected.
+ */
+export async function deleteUser(email: string): Promise<void> {
+  await deleteDoc(doc(db(), 'users', normalizeEmail(email)));
 }

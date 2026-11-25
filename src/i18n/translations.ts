@@ -305,7 +305,22 @@ export const translations = {
     colActions: 'Actions',
     activeStatus: 'Active',
     inactiveStatus: 'Inactive',
-    
+    titleFounderCeo: 'Founder & CEO',
+    titleGeneralManager: 'General Manager',
+    titleAdministrativeManager: 'Administrative Manager',
+    titleMaintenanceManager: 'Maintenance Manager',
+    titleMarketingManager: 'Marketing Manager',
+    titleRevenueManager: 'Revenue Manager',
+    titlePrivateChef: 'Private Chef',
+    titleYachtCaptain: 'Yacht Captain',
+    titleHousekeeping: 'Housekeeping',
+    titleSelect: 'Select a position',
+    deleteUser: 'Delete user',
+    deleteUserTitle: 'Delete this user?',
+    deleteUserBody: '{name} ({email}) will be permanently removed from the approved users list. Their past work orders and history keep their name. This cannot be undone.',
+    deleteUserConfirm: 'Delete',
+    deleteUserFailed: 'Could not delete the user.',
+
     // Generic UI
     loading: 'Loading...',
 
@@ -634,7 +649,22 @@ export const translations = {
     colActions: 'Acciones',
     activeStatus: 'Activo',
     inactiveStatus: 'Inactivo',
-    
+    titleFounderCeo: 'Fundador(a) y CEO',
+    titleGeneralManager: 'Gerente General',
+    titleAdministrativeManager: 'Gerente Administrativo(a)',
+    titleMaintenanceManager: 'Gerente de Mantenimiento',
+    titleMarketingManager: 'Gerente de Marketing',
+    titleRevenueManager: 'Gerente de Ingresos',
+    titlePrivateChef: 'Chef Privado',
+    titleYachtCaptain: 'Capitán de Yate',
+    titleHousekeeping: 'Ama de Llaves',
+    titleSelect: 'Seleccione un puesto',
+    deleteUser: 'Borrar usuario',
+    deleteUserTitle: '¿Borrar este usuario?',
+    deleteUserBody: '{name} ({email}) se quitará de forma permanente de la lista de usuarios aprobados. Sus órdenes e historial anteriores conservan su nombre. Esta acción no se puede deshacer.',
+    deleteUserConfirm: 'Borrar',
+    deleteUserFailed: 'No se pudo borrar el usuario.',
+
     // Generic UI
     loading: 'Cargando...',
 

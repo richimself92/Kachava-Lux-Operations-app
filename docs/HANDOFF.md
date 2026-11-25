@@ -2,7 +2,7 @@
 
 Status as of **2026-11-23**. Covers OpenSpec change `firebase-backend-and-workflow` (archived), the
 follow-up UI/feature rounds (work-order edit/delete, MUJI redesign, phone photos, admin reopen) and the
-change `translate-ticket-comments` (implemented, not deployed, not archived yet).
+change `translate-ticket-comments` (implemented and archived on 2026-11-23, not deployed).
 
 ## 1. Where things are
 
@@ -14,7 +14,7 @@ change `translate-ticket-comments` (implemented, not deployed, not archived yet)
 | Firestore location | `nam5` → Cloud Functions in `us-central1` |
 | Auth | Microsoft (Entra ID, single tenant `kachavalux.com`) + `users/{email}` allowlist |
 | Deploy guide | [`docs/DEPLOYMENT.md`](DEPLOYMENT.md) |
-| Specs | `openspec/specs/` (access-control, maintenance-requests, request-lifecycle, operational-kpis); comment translation in `openspec/changes/translate-ticket-comments/` until archived |
+| Specs | `openspec/specs/` (access-control, maintenance-requests, request-lifecycle, operational-kpis, comment-translation); archived changes in `openspec/changes/archive/` |
 
 ## 2. Security rules
 
@@ -24,11 +24,11 @@ change `translate-ticket-comments` (implemented, not deployed, not archived yet)
 - **Pending:** the latest rules (admin-only request deletion, new facilities, optional legacy location detail,
   10,000-char rich-text notes, required pending reason, supervisor detail edits — location, category, priority,
   supervisor — admin reopen of completed requests with reopen photos, explicit client deny on
-  `maintenanceRequests/{id}/translations`) and functions (default supervisor, cleanup on delete including
+  `maintenanceRequests/{id}/translations`, admin deletion of deactivated users) and functions (default supervisor, cleanup on delete including
   cached translations, ticket backfill, SLA recompute on priority change, `translateComments`) are **not
   deployed yet**. Deploy order in §6 below.
 - Automated coverage: 104 rules tests (Firestore + Storage + client service + photo uploads per role + reopen),
-  42 functions tests (triggers + comment translation), 93 unit tests — all passing on 2026-11-23.
+  42 functions tests (triggers + comment translation), 97 unit tests — all passing on 2026-11-25.
   `npm run test:rules` / `test:functions` need a HotSpot JDK; a pre-check (`scripts/check-java.mjs`) stops
   with instructions when the `java` on PATH is OpenJ9 (IBM Semeru), which otherwise fails with
   `{"error":{"code":500,"status":"UNKNOWN"}}`.
@@ -59,6 +59,13 @@ Seeded from `scripts/initial-roster.json`; afterwards managed in the app (Person
 - **Request deletion:** the original design kept every record forever. Admins can now permanently delete a
   request; its audit history and photos are removed with it. There is no record of who deleted it beyond the
   function log (request ID + ticket ID).
+- **Deleting users:** the original design kept every allowlist entry forever (deactivate only). Admins can now
+  permanently delete a user that is already deactivated (trash icon in Personal → Actions). Requests and audit
+  entries keep their own name/email snapshots, so attribution is unaffected; active users and your own entry
+  cannot be deleted (enforced by the rules).
+- **Job titles:** the free-text title became a fixed, translated catalog (`JOB_TITLES` in `shared/domain.ts`,
+  stored as codes such as `maintenance_manager`). Existing English titles are still recognised and translated;
+  picking a title in Personal saves the code, and re-running `seed-users` also normalises them.
 - **Reopening completed requests:** the original lifecycle made `completada` final. Admins can now reopen a
   completed request back to `pendiente` with a required note and up to 5 photos; the previous completion stays
   in the audit history and KPI work time continues.
@@ -106,8 +113,7 @@ Fill in the ⏳ rows (date, account used, result) after the next production depl
    `roles/cloudtranslate.user` + `roles/datastore.user`, give the deployer `roles/iam.serviceAccountUser`,
    add `TRANSLATE_LOCATION` / `TRANSLATE_SERVICE_ACCOUNT` to `functions/.env.kachava-lux-ops`). If your
    gcloud has another project active, keep the two `export CLOUDSDK_*` lines at the top of that script.
-   Then deploy rules → functions → hosting and run checklist row 12. Not deployed yet. Archive the change
-   (`/opsx:archive`) after review so its specs move into `openspec/specs/`.
+   Then deploy rules → functions → hosting and run checklist row 12. Not deployed yet.
 4. Run the ⏳ rows of §5 and record the results here.
 5. Merge `design-improvements` into `main`, then `translation-service`, once the checklist passes.
 6. Rotate the Microsoft client secret before it expires (DEPLOYMENT §8).

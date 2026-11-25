@@ -1,4 +1,4 @@
-import { CATEGORIES, PRIORITIES, STATUSES } from '../../shared/domain';
+import { CATEGORIES, JOB_TITLES, PRIORITIES, STATUSES, toJobTitle, type JobTitle } from '../../shared/domain';
 import { translations } from '../i18n/translations';
 import type {
   CommonAreaSubLocation,
@@ -95,4 +95,24 @@ export function locationLabel(t: Dict, code: string, name: string): string {
   return key ? (t[key] as string) : name;
 }
 
-export const ticketLabel = (t: Dict, r: Pick<MaintenanceRequest, 'ticketId'>) => r.ticketId ?? t.ticketAssigning;
+const JOB_TITLE_KEYS: Record<JobTitle, keyof Dict> = {
+  founder_ceo: 'titleFounderCeo',
+  general_manager: 'titleGeneralManager',
+  administrative_manager: 'titleAdministrativeManager',
+  maintenance_manager: 'titleMaintenanceManager',
+  marketing_manager: 'titleMarketingManager',
+  revenue_manager: 'titleRevenueManager',
+  private_chef: 'titlePrivateChef',
+  yacht_captain: 'titleYachtCaptain',
+  housekeeping: 'titleHousekeeping',
+};
+
+/** Translated job title; legacy English titles are recognised, unknown free text is shown as stored. */
+export function jobTitleLabel(t: Dict, stored: string | undefined | null): string {
+  const code = toJobTitle(stored);
+  return code ? (t[JOB_TITLE_KEYS[code]] as string) : String(stored ?? '');
+}
+
+export const jobTitleOptions = (t: Dict) => JOB_TITLES.map((key) => ({ key, label: jobTitleLabel(t, key) }));
+
+export const ticketLabel =(t: Dict, r: Pick<MaintenanceRequest, 'ticketId'>) => r.ticketId ?? t.ticketAssigning;

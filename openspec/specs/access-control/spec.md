@@ -70,7 +70,21 @@ The system SHALL support exactly three roles:
 - **THEN** the backend rejects the write
 
 ### Requirement: Admin user management
-Admins SHALL be able to add an approved user (email, display name, role, title), change a user's role, and activate or deactivate a user. These changes SHALL persist and take effect on that user's next data access without redeploying the app.
+Admins SHALL be able to add an approved user (email, display name, role, title), change a user's role and title, activate or deactivate a user, and permanently delete a user that is already deactivated. These changes SHALL persist and take effect on that user's next data access without redeploying the app.
+
+The title SHALL be chosen from a fixed job-title catalog (stored as a stable code) and SHALL be displayed in the selected UI language. Titles stored as English text before the catalog existed SHALL be recognised and translated; unknown titles SHALL be shown as stored.
+
+#### Scenario: Title shown in the selected language
+- **WHEN** a user's title is `maintenance_manager` (or the legacy text "Maintenance Manager") and the UI language is Spanish
+- **THEN** the Personal panel, the sidebar and the supervisor picker show "Gerente de Mantenimiento"
+
+#### Scenario: Admin deletes a deactivated user
+- **WHEN** an admin confirms the trash action on a deactivated user
+- **THEN** that user's allowlist entry is removed, and past requests and audit entries keep the name and email recorded at the time
+
+#### Scenario: Active users cannot be deleted
+- **WHEN** an admin, a supervisor or staff attempts to delete an active user, or a non-admin attempts to delete any user
+- **THEN** the backend rejects the delete
 
 #### Scenario: Admin adds a new employee
 - **WHEN** an admin adds `dina@kachavalux.com` with role Staff
