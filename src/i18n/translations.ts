@@ -321,6 +321,14 @@ export const translations = {
     deleteUserConfirm: 'Delete',
     deleteUserFailed: 'Could not delete the user.',
 
+    // New-request notifications
+    newRequestAlert: 'New work order',
+    pushEnable: 'Turn on notifications',
+    pushOn: 'Notifications on',
+    pushFailed: 'Could not turn on notifications.',
+    pushBlocked: 'Notifications are blocked for this site. Allow them in the browser settings.',
+    pushIosInstall: 'To get notifications, add the app to your Home Screen (Share → Add to Home Screen) and open it from there.',
+
     // Generic UI
     loading: 'Loading...',
 
@@ -664,6 +672,14 @@ export const translations = {
     deleteUserBody: '{name} ({email}) se quitará de forma permanente de la lista de usuarios aprobados. Sus órdenes e historial anteriores conservan su nombre. Esta acción no se puede deshacer.',
     deleteUserConfirm: 'Borrar',
     deleteUserFailed: 'No se pudo borrar el usuario.',
+
+    // Notificaciones de nuevas órdenes
+    newRequestAlert: 'Nueva orden de trabajo',
+    pushEnable: 'Activar notificaciones',
+    pushOn: 'Notificaciones activadas',
+    pushFailed: 'No se pudieron activar las notificaciones.',
+    pushBlocked: 'Las notificaciones están bloqueadas para este sitio. Permítalas en la configuración del navegador.',
+    pushIosInstall: 'Para recibir avisos, agregue la app a la pantalla de inicio (Compartir → Agregar a inicio) y ábrala desde ahí.',
 
     // Generic UI
     loading: 'Cargando...',

@@ -136,6 +136,23 @@ service cloud.firestore {
       allow delete: if isAdmin()
         && resource.data.active == false
         && email != emailLower();
+
+      // Web-push device tokens: each user registers/removes only their own; only the
+      // Cloud Function (Admin SDK) reads them to send new-request notifications.
+      match /pushTokens/{tokenId} {
+        allow read: if false;
+        allow create, update: if isApproved()
+          && email == emailLower()
+          && request.resource.data.keys().hasOnly(['token', 'language', 'platform', 'updatedAt'])
+          && request.resource.data.keys().hasAll(['token', 'language', 'updatedAt'])
+          && request.resource.data.token is string
+          && request.resource.data.token.size() > 0 && request.resource.data.token.size() <= 4096
+          && request.resource.data.language in ['es', 'en']
+          && (!('platform' in request.resource.data)
+              || (request.resource.data.platform is string && request.resource.data.platform.size() <= 40))
+          && request.resource.data.updatedAt == request.time;
+        allow delete: if isApproved() && email == emailLower();
+      }
     }
 
     // ------------------------------------------------------------------

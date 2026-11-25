@@ -234,3 +234,22 @@ All dates and times SHALL be displayed in the America/Cancun timezone, regardles
 #### Scenario: Device in another timezone
 - **WHEN** a supervisor views a request from a device set to a different timezone
 - **THEN** times are shown in America/Cancun
+
+### Requirement: New-request notifications
+When a request is created, the system SHALL notify the Maintenance Manager (every active user whose title is Maintenance Manager) and the assigned supervisor, and SHALL NOT notify the person who submitted it. A recipient with the app open SHALL hear a sound and see a notice. A recipient who turned on notifications on a device SHALL receive a system notification on that device even when the app is closed, in the language saved for that device. Tapping it SHALL open the request. A failure to notify SHALL NOT affect the ticket ID or the default assignment.
+
+#### Scenario: Maintenance Manager notified with the phone locked
+- **WHEN** a staff user creates a request and the Maintenance Manager has turned on notifications on an Android phone (or an iPhone with the app on the Home Screen)
+- **THEN** a "New work order" notification with the ticket ID and location arrives with the device's notification sound
+
+#### Scenario: Assignee also notified
+- **WHEN** the new request is assigned to a supervisor other than the Maintenance Manager
+- **THEN** both receive the notification
+
+#### Scenario: Submitter not notified
+- **WHEN** the Maintenance Manager creates a request themselves
+- **THEN** they receive no notification for it
+
+#### Scenario: App open
+- **WHEN** a recipient has the app open while the request is created
+- **THEN** a short chime plays and a notice names the new work order

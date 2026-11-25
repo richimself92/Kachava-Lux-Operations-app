@@ -87,6 +87,7 @@ function required<T>(value: T | null, name: string): T {
   return value;
 }
 
+export const firebaseApp = (): FirebaseApp => required(app, 'App');
 export const auth = (): Auth => required(authInstance, 'Auth');
 export const db = (): Firestore => required(dbInstance, 'Firestore');
 export const storage = (): FirebaseStorage => required(storageInstance, 'Storage');

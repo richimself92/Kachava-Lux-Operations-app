@@ -325,3 +325,32 @@ Notes:
   only** to the function's service account, never project-wide:
   `gcloud secrets add-iam-policy-binding NAME --project "$P" --member="serviceAccount:${SA}" --role="roles/secretmanager.secretAccessor"`.
 - Deploy order stays §5: rules (the explicit deny on `translations`) → functions → hosting.
+
+## 10. New-request notifications (Web Push via FCM) — one-time setup
+
+When a request is created, `onMaintenanceRequestCreated` sends a push to the **Maintenance Manager**
+(every active user whose title is `maintenance_manager`) plus the **assigned supervisor**, never to
+the submitter. While the app is open, those users also hear a chime and see a notice (no setup needed).
+
+1. **Web Push key:** Firebase console → Project settings → **Cloud Messaging** → *Web Push certificates*
+   → **Generate key pair**. Copy the public key into `.env.production` (and `.env.local` if you test push
+   locally against production) as `VITE_FIREBASE_VAPID_KEY="…"`. It is a public value. Without it the
+   "Turn on notifications" button is hidden.
+2. **API and permission** (bash; keep the two `export CLOUDSDK_*` lines of §9 if gcloud has another project active):
+   ```bash
+   P=kachava-lux-ops
+   gcloud services enable fcm.googleapis.com --project "$P"
+   gcloud projects add-iam-policy-binding "$P" \
+     --member="serviceAccount:146497773004-compute@developer.gserviceaccount.com" \
+     --role="roles/firebasecloudmessaging.admin"
+   ```
+3. **Deploy** in the §5 order: rules (`users/{email}/pushTokens`) → functions → hosting.
+4. **Turn it on per device** (each recipient, once): open the app → menu → **Turn on notifications** → Allow.
+   - **iPhone/iPad (iOS 16.4+):** open the site in Safari → Share → **Add to Home Screen**, open the app
+     from that icon, then tap the button. Push does not work from a normal Safari tab.
+   - **Android:** Chrome works directly; installing ("Add to Home screen") is optional.
+   - The notification sound is the device's notification tone (web push cannot set a custom sound);
+     the phone must not be in silent / Do Not Disturb mode.
+5. **Check:** from another account (staff), create a request with the recipient's phone locked → a
+   "New work order · KLM-… · Villa …" notification arrives; tapping it opens that request.
+   Function logs show `new request push` with `recipients`, `sent`, `failed`.

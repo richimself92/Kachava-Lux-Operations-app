@@ -1,5 +1,6 @@
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
+import { getMessaging } from 'firebase-admin/messaging';
 import { getStorage } from 'firebase-admin/storage';
 import { logger } from 'firebase-functions';
 import { defineString } from 'firebase-functions/params';
@@ -14,6 +15,7 @@ import {
   purgeRequestArtifacts,
   recomputeKpi,
 } from './logic';
+import { sendNewRequestPush } from './notify';
 import {
   fakeTranslator,
   TranslateError,
@@ -62,6 +64,13 @@ export const onMaintenanceRequestCreated = onDocumentCreated('maintenanceRequest
   const assignee = await assignDefaultSupervisor(db, event.data.ref, DEFAULT_ASSIGNEE_EMAIL.value());
   if (assignee) logger.info('default supervisor assigned', { reqId: event.params.reqId, assignee: assignee.email });
   else logger.warn('default supervisor not assigned', { reqId: event.params.reqId, configured: DEFAULT_ASSIGNEE_EMAIL.value() });
+  // Notification failures must never undo the ticket or the assignment above.
+  try {
+    const push = await sendNewRequestPush(db, getMessaging(), event.params.reqId);
+    logger.info('new request push', { reqId: event.params.reqId, ...push });
+  } catch (err) {
+    logger.warn('new request push failed', { reqId: event.params.reqId, error: String(err) });
+  }
 });
 
 /**

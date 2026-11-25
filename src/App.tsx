@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useNewRequestAlert } from './hooks/useNewRequestAlert';
+import { locationLabel } from './lib/labels';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { RequestProvider, useRequests } from './context/RequestContext';
 import { Navbar } from './components/Navbar';
@@ -31,6 +33,24 @@ const MainLayout: React.FC = () => {
       setToastMessage(null);
     }, 4000);
   };
+
+  // Sound + notice for new requests while the app is open.
+  useNewRequestAlert((r) => {
+    const t = translations[language];
+    const what = [r.ticketId, locationLabel(t, r.location.code, r.location.name)].filter(Boolean).join(' · ');
+    showToast(`${t.newRequestAlert}: ${what}`);
+  });
+
+  // A tapped push notification opens /?request={id}: show that request, then clean the URL.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('request');
+    if (!id) return;
+    setSelectedRequestId(id);
+    params.delete('request');
+    const qs = params.toString();
+    window.history.replaceState(null, '', `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash}`);
+  }, []);
 
   const handleSelectVillaFromCatalog = (locationCode: string) => {
     setFilterOptions((prev) => ({

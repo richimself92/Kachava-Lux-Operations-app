@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useRequests } from '../context/RequestContext';
 import { translations } from '../i18n/translations';
 import { jobTitleLabel } from '../lib/labels';
+import { PushToggle } from './PushToggle';
 
 interface SidebarProps {
   currentTab: string;
@@ -166,6 +167,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {currentUser?.title && <div className="text-xs text-muted truncate">{jobTitleLabel(t, currentUser.title)}</div>}
           </div>
         )}
+        <PushToggle rail={rail} />
         <button
           onClick={() => void signOut()}
           title={t.signOutButton}

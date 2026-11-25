@@ -136,6 +136,27 @@ describe('access control', () => {
     );
   });
 
+  it('lets each user register and remove only their own push tokens, and nobody read them', async () => {
+    const token = { token: 'fcm-token-abc', language: 'es', platform: 'android', updatedAt: serverTimestamp() };
+    const own = (u: TestUser, owner = u.email) => doc(dbFor(env, u), 'users', owner, 'pushTokens', 't1');
+    await assertSucceeds(setDoc(own(USERS.sup), token));
+    await assertSucceeds(setDoc(own(USERS.staff), token));
+    // Not for someone else, not inactive or unlisted users, not with bad fields.
+    await assertFails(setDoc(own(USERS.staff, USERS.sup.email), token));
+    await assertFails(setDoc(own(USERS.admin, USERS.sup.email), token));
+    await assertFails(setDoc(own(USERS.inactive), token));
+    await assertFails(setDoc(own(UNLISTED), token));
+    await assertFails(setDoc(own(USERS.sup), { ...token, language: 'fr' }));
+    await assertFails(setDoc(own(USERS.sup), { ...token, extra: true }));
+    await assertFails(setDoc(own(USERS.sup), { ...token, token: '' }));
+    // Nobody reads tokens (only the Cloud Function, via the Admin SDK).
+    await assertFails(getDoc(own(USERS.sup)));
+    await assertFails(getDoc(own(USERS.admin, USERS.sup.email)));
+    // Delete: owner only.
+    await assertFails(deleteDoc(own(USERS.admin, USERS.sup.email)));
+    await assertSucceeds(deleteDoc(own(USERS.sup)));
+  });
+
   it('lets only admins delete users, and only deactivated ones', async () => {
     // Active users cannot be deleted, not even by an admin (deactivate first).
     await assertFails(deleteDoc(doc(dbFor(env, USERS.admin), 'users', USERS.staff.email)));

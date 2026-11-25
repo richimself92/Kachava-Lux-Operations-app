@@ -95,6 +95,7 @@ Legend: ✅ confirmed on production · 🧪 verified on the local emulators only
 | 11 | Only admins see/use delete; history and photos removed | 🧪 |
 | 12 | Comment translation: a Spanish note shows in English with "Machine translation · View original"; in ES it shows as written (DEPLOYMENT §6.5) | 🧪 (emulators, fake translator) · ⏳ with Cloud Translation |
 | 13 | Admin reopens a completed request with a note and a photo; it returns to `pendiente` and the earlier completion stays in the history | 🧪 (rules tests) |
+| 14 | New request: the Maintenance Manager (and the assignee) gets a push with sound on a locked Android phone and on an iPhone with the app added to the Home Screen; with the app open, a chime and a notice (DEPLOYMENT §10) | 🧪 (rules + functions tests, fake FCM) · ⏳ on devices |
 
 Fill in the ⏳ rows (date, account used, result) after the next production deploy.
 
@@ -116,9 +117,12 @@ Fill in the ⏳ rows (date, account used, result) after the next production depl
    add `TRANSLATE_LOCATION` / `TRANSLATE_SERVICE_ACCOUNT` to `functions/.env.kachava-lux-ops`). If your
    gcloud has another project active, keep the two `export CLOUDSDK_*` lines at the top of that script.
    Then deploy rules → functions → hosting and run checklist row 12. Not deployed yet.
-4. Run the ⏳ rows of §5 and record the results here.
-5. Merge `design-improvements` into `main`, then `translation-service`, once the checklist passes.
-6. Rotate the Microsoft client secret before it expires (DEPLOYMENT §8).
-7. Known limitations: no "recompute KPIs" admin action; orphan Storage objects from failed uploads are not
+4. **New-request notifications:** generate the Web Push key, enable `fcm.googleapis.com`, grant
+   `roles/firebasecloudmessaging.admin` (DEPLOYMENT §10); deploy rules → functions → hosting; each
+   recipient taps "Turn on notifications" once per device (iPhone: from the Home Screen app). Run row 14.
+5. Run the ⏳ rows of §5 and record the results here.
+6. Merge `design-improvements` into `main`, then `translation-service`, once the checklist passes.
+7. Rotate the Microsoft client secret before it expires (DEPLOYMENT §8).
+8. Known limitations: no "recompute KPIs" admin action; orphan Storage objects from failed uploads are not
    cleaned up; deletion is permanent with no undo; translations are shown only in the request detail (not in
    lists or previews), and the language switch is not reachable while a request is open.
